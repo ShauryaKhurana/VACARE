@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Form library</h1>
+<p class="muted">{{ forms|length }} forms from the manifest. "Who fills it" is the part veterans get
+wrong most often - a third-party form is a dependency to chase, not a task to do.</p>
+<table>
+  <tr><th>Form</th><th>What it is</th><th>Who fills it</th><th>Lock</th></tr>
+  {% for f in forms %}
+  <tr>
+    <td class="form-no">
+      {% if f.best_link %}<a href="{{ f.best_link }}" target="_blank" rel="noopener">{{ f.number }}</a>
+      {% else %}{{ f.number }}{% endif %}
+    </td>
+    <td>{{ f.title }}</td>
+    <td><span class="badge b-{{ f.filled_by.value }}">{{ f.filled_by.value }}</span></td>
+    <td class="muted" style="font-size:13px">{{ f.note or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

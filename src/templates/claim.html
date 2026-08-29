@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ claim.veteran.full_name }}</h1>
+<p class="muted"><span class="form-no">{{ claim.id }}</span> &middot; status
+  <b>{{ claim.status.value.replace('_',' ') }}</b> &middot;
+  <span class="score">{{ score }}/100</span> of the checklist complete</p>
+
+{% if message %}<div class="banner">{{ message }}</div>{% endif %}
+
+<div class="card">
+  <div class="eyebrow">Your lane</div>
+  <h3 style="margin:2px 0 6px; font-family:Archivo; font-size:19px">{{ lane_title }}</h3>
+  <p style="margin:0; font-size:14.5px">{{ lane_blurb }}</p>
+</div>
+
+{% if deadlines %}
+<h2>Clocks running</h2>
+{% for d in deadlines %}
+<div class="dl {{ d.urgency }}">
+  <div>
+    <b>{{ d.label }}</b>{% if not d.hard %} <span class="muted">(soft)</span>{% endif %}
+    <div class="muted" style="font-size:13px">{{ d.detail }}</div>
+  </div>
+  <div class="days">
+    {% if d.expired %}EXPIRED{% else %}{{ d.days_left }} days{% endif %}<br>
+    <span class="muted" style="font-weight:400">{{ d.due }}</span>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>What to do, in order</h2>
+{% if steps %}
+<ol class="rail">
+  {% for step in steps %}
+  <li data-n="{{ loop.index }}" {% if step.gate %}class="gate"{% endif %}>
+    <span style="font-weight:700">{{ step.title }}</span>
+    {% if step.form %}
+      &middot; <span class="form-no">{% if step.form.best_link %}<a href="{{ step.form.best_link }}" target="_blank" rel="noopener">{{ step.form.number }}</a>{% else %}{{ step.form.number }}{% endif %}</span>
+      <span class="badge b-{{ step.form.filled_by.value }}">{{ step.form.filled_by.value }}</span>
+    {% elif step.gate %}
+      <span class="badge b-lock">gate</span>
+    {% endif %}
+    {% if step.optional %}<span class="muted" style="font-size:13px">optional</span>{% endif %}
+    <p>{{ step.detail }}</p>
+    {% if step.lock %}<p class="lock">Lock: {{ step.lock }}</p>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<div class="wash">Not enough information to route this claim into a lane yet.</div>
+{% endif %}
+
+{% if third_party %}
+<h2>Waiting on someone else</h2>
+<p class="muted" style="font-size:14px">These are dependencies, not tasks. The veteran's job is
+getting the form to the right person and chasing it.</p>
+{% for step in third_party %}
+<div class="card">
+  <b>{{ step.title }}</b>
+  {% if step.form %}&middot; <span class="form-no">{{ step.form.number }}</span>
+  <span class="badge b-{{ step.form.filled_by.value }}">{{ step.form.filled_by.value }}</span>{% endif %}
+  <p style="margin:5px 0 0; font-size:14px">{{ step.detail }}</p>
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>Evidence checklist</h2>
+{% if blockers %}
+<div class="banner" style="border-left-color:#b3261e">
+  <b>Blockers - not ready to file:</b>
+  <ul style="margin:6px 0 0">{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+</div>
+{% else %}
+<div class="banner" style="border-left-color:#1e6f45"><b>No blockers.</b> All required documents and
+service links are recorded.</div>
+{% endif %}
+
+{% if missing %}
+<table>
+  <tr><th>Still needed</th><th>For</th><th>Why</th></tr>
+  {% for item in missing %}
+  <tr>
+    <td>{% if item.required %}<span class="badge b-lock">required</span>{% else %}<span class="muted">suggested</span>{% endif %}
+      {{ item.label }}</td>
+    <td class="muted">{{ item.condition_name or "the claim" }}</td>
+    <td class="muted" style="font-size:13px">{{ item.why }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h3>Mark a document as received</h3>
+<form method="post" action="/claim/{{ claim.id }}/evidence" style="display:flex; gap:8px; align-items:center">
+  <select name="evidence_type" style="max-width:340px">
+    {% for e in evidence_types %}
+      {% if e not in held %}<option value="{{ e.value }}">{{ friendly(e) }}</option>{% endif %}
+    {% endfor %}
+  </select>
+  <button type="submit">Add</button>
+</form>
+
+{% if warnings %}
+<h2>Weak points a VSO should confirm</h2>
+<ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Claim status</h2>
+<form method="post" action="/claim/{{ claim.id }}/status" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+  <select name="status" style="max-width:200px">
+    <option value="draft">draft</option>
+    <option value="ready_for_vso">ready for vso</option>
+    <option value="in_vso_review">in vso review</option>
+    <option value="submitted">submitted</option>
+    <option value="decided">decided</option>
+  </select>
+  <input type="text" name="note" placeholder="Note (optional)" style="max-width:280px">
+  <button type="submit" class="btn ghost">Record</button>
+</form>
+
+<table style="margin-top:14px">
+  <tr><th>Date</th><th>Status</th><th>Note</th></tr>
+  {% for event in claim.status_history %}
+  <tr><td>{{ event.recorded_on }}</td><td>{{ event.status.value.replace('_',' ') }}</td>
+      <td class="muted">{{ event.note or "" }}</td></tr>
+  {% endfor %}
+</table>
+
+<p style="margin-top:24px">
+  <a href="/claim/{{ claim.id }}/packet" class="btn" target="_blank">View VSO packet</a>
+  <a href="/" class="btn ghost">All claims</a>
+</p>
+{% endblock %}

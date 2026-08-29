@@ -1,0 +1,1 @@
+"""VACARE application package."""
