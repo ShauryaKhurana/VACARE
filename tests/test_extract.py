@@ -47,8 +47,10 @@ def test_parse_date_handles_partial_and_junk():
     assert extract.parse_date(None) is None
 
 
-def test_parse_date_rejects_the_future():
+def test_parse_date_rejects_the_future_unless_asked():
+    """A birth or onset date in the future is a misread; a separation date is not."""
     assert extract.parse_date("2099-01-01") is None
+    assert extract.parse_date("2099-01-01", allow_future=True) == date(2099, 1, 1)
 
 
 def test_names_from_documents_are_recased_but_typed_names_are_not():

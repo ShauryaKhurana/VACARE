@@ -43,6 +43,8 @@ DOC_TO_EVIDENCE = {
     "medical_record": EvidenceType.CURRENT_MEDICAL_RECORD,
     "nexus_letter": EvidenceType.NEXUS_LETTER,
     "buddy_statement": EvidenceType.BUDDY_STATEMENT,
+    "audiology_report": EvidenceType.HEARING_TEST,
+    "separation_orders": EvidenceType.SERVICE_PERSONNEL_RECORD,
 }
 
 
@@ -394,6 +396,16 @@ def apply_document(session: Session, attachment: Attachment) -> str:
         if applied:
             notes.append("Filled in " + ", ".join(applied) + " - you don't need to type those.")
         session.identity_done = True
+
+    if doc_type == "separation_orders" and payload.get("still_serving"):
+        # Separation orders are how a Lane 1 claim gets dated: the member has
+        # no DD-214 yet, and the separation date drives the BDD window.
+        claim.context.still_serving = True
+        separation = extract.parse_date(payload.get("service_end"), allow_future=True)
+        if separation:
+            claim.context.separation_date = separation
+            claim.veteran.service_end = None
+            notes.append(f"You separate on {separation} - that sets your filing window.")
 
     if doc_type == "decision_letter":
         decision = extract.parse_date(payload.get("decision_date"))

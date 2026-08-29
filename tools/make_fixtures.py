@@ -20,6 +20,7 @@ Writes into tests/fixtures/:
 from __future__ import annotations
 
 import random
+from datetime import date, timedelta
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -231,6 +232,157 @@ DECISION_LETTER = """
 """
 
 
+# Separation orders are dated relative to today so the BDD demo (180-90 days
+# before separation) keeps working instead of going stale in a week.
+SEPARATION_DATE = date.today() + timedelta(days=125)
+
+SEPARATION_ORDERS = f"""
+        DEPARTMENT OF THE ARMY
+        HEADQUARTERS, 4TH INFANTRY DIVISION
+        FORT CARSON, COLORADO 80913
+
+        ORDERS 214-0037                      {date.today().strftime('%d %B %Y').upper()}
+
+        RIVERA, MARCUS A.    SGT / E-5    000-00-0000
+        4TH BRIGADE COMBAT TEAM, FORT CARSON, CO
+
+        You are released from active duty and assigned to the US Army
+        Reserve Control Group effective the date shown below.
+
+        PROJECTED SEPARATION DATE: {SEPARATION_DATE.strftime('%d %B %Y').upper()}
+        TYPE OF SEPARATION:        RELEASE FROM ACTIVE DUTY
+        CHARACTER OF SERVICE:      HONORABLE (ANTICIPATED)
+        TERMINAL LEAVE BEGINS:     {(SEPARATION_DATE - timedelta(days=30)).strftime('%d %B %Y').upper()}
+
+        Member is directed to complete pre-separation counseling and the
+        Separation Health Assessment prior to the date above.
+
+        FOR THE COMMANDER
+
+        SPECIMEN - SYNTHETIC TEST DOCUMENT, NOT REAL MILITARY ORDERS
+"""
+
+NEXUS_LETTER = """
+        SONORAN VALLEY FAMILY MEDICINE
+        1180 W Congress St, Tucson AZ 85745
+
+        March 18, 2026
+
+        RE: Marcus A. Rivera        DOB: 07/22/1990
+
+        To Whom It May Concern:
+
+        I have treated Mr. Rivera since 2023 and have reviewed his service
+        treatment records, including documented blast exposure during his
+        deployment to Afghanistan in 2011.
+
+        It is my professional medical opinion that his bilateral tinnitus
+        is AT LEAST AS LIKELY AS NOT caused by acoustic trauma sustained
+        during his active military service. The onset of his symptoms
+        immediately following documented blast exposure, and the absence
+        of any pre-service history of hearing complaints, support this
+        conclusion.
+
+        It is further my opinion that his chronic lumbar strain is at
+        least as likely as not aggravated beyond its natural progression
+        by the same in-service event.
+
+        Sincerely,
+        A. Okonkwo, MD
+        Board Certified, Family Medicine
+
+        SPECIMEN - SYNTHETIC TEST DOCUMENT, NOT A REAL MEDICAL OPINION
+"""
+
+BUDDY_STATEMENT = """
+        STATEMENT IN SUPPORT OF CLAIM
+        (Lay / Witness Statement)
+
+        Name of Witness: Daniel R. Alvarez
+        Relationship: Served together, 4th Brigade Combat Team
+
+        I served with Marcus Rivera in Afghanistan in 2011. On 3 February
+        2011 I was in the second vehicle of a convoy outside Kandahar when
+        the lead vehicle struck an improvised explosive device. Marcus was
+        in that lead vehicle.
+
+        I helped pull him out. He could not hear properly for several days
+        afterward and kept asking us to repeat ourselves. He complained
+        about his ears ringing constantly for the rest of the deployment.
+
+        Before that day I never heard him complain about his hearing or
+        his back. Afterward he had trouble carrying his gear and would
+        stretch his back out during every halt.
+
+        I certify that the statements above are true to the best of my
+        knowledge and belief.
+
+        Signed: Daniel R. Alvarez        Date: 2026-04-02
+
+        SPECIMEN - SYNTHETIC TEST DOCUMENT, NOT A REAL WITNESS STATEMENT
+"""
+
+SERVICE_TREATMENT_RECORD = """
+        CHRONOLOGICAL RECORD OF MEDICAL CARE
+        FORWARD OPERATING BASE - KANDAHAR, AFGHANISTAN
+
+        PATIENT: RIVERA, MARCUS A.       SSN: 000-00-0000
+        UNIT: 4TH BCT                    DATE: 2011 02 04
+
+        CHIEF COMPLAINT: Ringing in both ears, headache, low back pain
+        following IED blast 3 FEB 2011.
+
+        HISTORY: Member was in lead vehicle of convoy struck by IED.
+        No loss of consciousness reported. Reports immediate onset of
+        bilateral tinnitus and difficulty hearing. Also reports lower
+        back pain after being pulled from the vehicle.
+
+        EXAM: Tympanic membranes intact bilaterally. Whisper test
+        abnormal at 3 feet. Lumbar paraspinal tenderness noted, range
+        of motion mildly limited by pain.
+
+        ASSESSMENT: 1. Acoustic trauma with bilateral tinnitus
+                    2. Acute lumbar strain
+
+        PLAN: Motrin 800mg. Quarters x 24 hours. Hearing protection
+        counseling. Follow up if symptoms persist. Audiology referral
+        on return to home station.
+
+        Provider: CPT J. Lin, PA-C
+
+        SPECIMEN - SYNTHETIC TEST RECORD, NOT A REAL PATIENT
+"""
+
+AUDIOLOGY_REPORT = """
+        SOUTHERN ARIZONA VA HEALTH CARE SYSTEM
+        AUDIOLOGY AND SPEECH PATHOLOGY
+
+        PATIENT: Rivera, Marcus A.     DOB: 07/22/1990
+        DATE OF EXAM: 2026-04-15
+
+        PURE TONE AIR CONDUCTION THRESHOLDS (dB HL)
+
+                  500Hz  1000Hz  2000Hz  3000Hz  4000Hz
+        RIGHT       15      20      25      45      55
+        LEFT        15      20      30      50      60
+
+        SPEECH RECOGNITION: Right 92%   Left 88%
+
+        TINNITUS ASSESSMENT: Patient reports constant bilateral
+        high-pitched tinnitus, present since 2011 blast exposure.
+        Tinnitus matched at 4000 Hz. Reported as persistent and
+        interfering with sleep onset.
+
+        IMPRESSION: Bilateral high-frequency sensorineural hearing
+        loss consistent with noise exposure. Constant bilateral
+        tinnitus reported.
+
+        Audiologist: M. Chen, AuD, CCC-A
+
+        SPECIMEN - SYNTHETIC TEST RECORD, NOT A REAL PATIENT
+"""
+
+
 def text_page(body: str, seed: int = 3) -> Image.Image:
     """Render a text document as a slightly imperfect scan."""
     image = Image.new("RGB", (1400, 1900), "white")
@@ -270,15 +422,25 @@ def main() -> None:
     medical = text_page(MEDICAL_RECORD, seed=5)
     decision = text_page(DECISION_LETTER, seed=9)
 
-    clean.save(FIXTURES / "dd214_clean.png")
+    pages = {
+        "dd214_clean": clean,
+        "dd214_scanned": scanned,
+        "medical_record": medical,
+        "decision_letter": decision,
+        "separation_orders": text_page(SEPARATION_ORDERS, seed=11),
+        "nexus_letter": text_page(NEXUS_LETTER, seed=13),
+        "buddy_statement": text_page(BUDDY_STATEMENT, seed=17),
+        "service_treatment_record": text_page(SERVICE_TREATMENT_RECORD, seed=19),
+        "audiology_report": text_page(AUDIOLOGY_REPORT, seed=23),
+    }
+
     scanned.save(FIXTURES / "dd214_scanned.jpg", quality=48)
-    medical.save(FIXTURES / "medical_record.png")
-    decision.save(FIXTURES / "decision_letter.png")
     (FIXTURES / "dd214.txt").write_text(dd214_text())
 
-    # PDF copies, because that is what most veterans actually upload.
-    for image, name in ((clean, "dd214_clean"), (scanned, "dd214_scanned"),
-                        (medical, "medical_record"), (decision, "decision_letter")):
+    for name, image in pages.items():
+        if name != "dd214_scanned":
+            image.save(FIXTURES / f"{name}.png")
+        # PDF copies, because that is what most veterans actually upload.
         image.convert("RGB").save(FIXTURES / f"{name}.pdf", "PDF", resolution=150.0)
 
     print(f"Wrote fixtures to {FIXTURES}:")

@@ -87,6 +87,59 @@ def test_decision_letter_supplies_the_date_that_starts_the_clocks():
 
 @needs_fixtures
 @live
+@pytest.mark.parametrize("filename,expected", [
+    ("dd214_scanned.pdf", "dd214"),
+    ("separation_orders.pdf", "separation_orders"),
+    ("service_treatment_record.pdf", "service_treatment_record"),
+    ("medical_record.pdf", "medical_record"),
+    ("audiology_report.pdf", "audiology_report"),
+    ("nexus_letter.pdf", "nexus_letter"),
+    ("buddy_statement.pdf", "buddy_statement"),
+    ("decision_letter.pdf", "decision_letter"),
+])
+def test_every_demo_document_is_classified_correctly(filename, expected):
+    """A misclassified fixture is a broken demo, so all of them are checked."""
+    assert extract.extract_from_document(load(filename))["document_type"] == expected
+
+
+@needs_fixtures
+@live
+def test_separation_orders_put_the_claim_in_the_bdd_lane():
+    """The Lane 1 path: no DD-214 yet, so the orders supply the separation date."""
+    from src import intake_chat, lanes
+
+    session = intake_chat.new_session()
+    session.story_done = True
+    intake_chat.apply_document(session, load("separation_orders.pdf"))
+
+    context = session.claim.context
+    assert context.still_serving
+    assert context.separation_date is not None
+    assert context.separation_date > __import__("datetime").date.today()
+    assert lanes.determine_lane(context) == lanes.Lane.BDD
+    assert any("BDD window" in deadline.label for deadline in lanes.deadlines(session.claim))
+
+
+@needs_fixtures
+@live
+def test_the_audiogram_closes_the_hearing_test_checklist_item():
+    from src import evidence_rules, intake_chat
+
+    session = intake_chat.new_session()
+    session.story_done = True
+    intake_chat.ClaimIntake(session.claim).add_condition(
+        name="Tinnitus", current_symptoms="Constant ringing in both ears.",
+        started_in_service=True)
+    before = [i.label for i in evidence_rules.missing_evidence(session.claim)]
+    assert any("Audiology" in label for label in before)
+
+    intake_chat.apply_document(session, load("audiology_report.pdf"))
+    after = [i.label for i in evidence_rules.missing_evidence(session.claim)]
+    assert not any("Audiology" in label for label in after)
+
+
+@needs_fixtures
+@live
 def test_a_scanned_decision_letter_routes_the_claim_into_lane_five():
     """The end-to-end point: one upload should set the lane and its deadlines."""
     from src import intake_chat, lanes
