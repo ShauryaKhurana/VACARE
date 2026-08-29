@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Intake</h1>
+<p class="muted">Plain-language questions. The answers decide which lane you are in and which forms
+you actually need - nothing here is filed anywhere.</p>
+
+{% if error %}<div class="banner" style="border-left-color:#b3261e"><b>Check this:</b> {{ error }}</div>{% endif %}
+
+<form method="post" action="/intake">
+
+<h2>About you</h2>
+<div class="grid2">
+  <div><label>First name</label><input type="text" name="first_name" required></div>
+  <div><label>Last name</label><input type="text" name="last_name" required></div>
+  <div><label>Date of birth</label><input type="date" name="dob" required></div>
+  <div><label>Email</label><input type="text" name="email"></div>
+  <div><label>Phone</label><input type="text" name="phone"></div>
+  <div><label>Branch</label>
+    <select name="branch"><option value="">-</option>
+      {% for b in branches %}<option value="{{ b }}">{{ b.replace('_',' ') }}</option>{% endfor %}
+    </select></div>
+  <div><label>Service start</label><input type="date" name="service_start"></div>
+  <div><label>Service end</label><input type="date" name="service_end"></div>
+  <div><label>Discharge type</label>
+    <select name="discharge_type">
+      {% for d in discharges %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}
+    </select></div>
+</div>
+
+<h2>Where you are</h2>
+<div class="check"><input type="checkbox" name="still_serving" id="ss"><label for="ss">I am still serving</label></div>
+<div><label>Separation date (if known)</label><input type="date" name="separation_date"></div>
+<div class="check"><input type="checkbox" name="meb_referral" id="meb"><label for="meb">I have been referred to a medical board (MEB/IDES)</label></div>
+<div class="check"><input type="checkbox" name="guard_or_reserve" id="gr"><label for="gr">I am Guard or Reserve</label></div>
+
+<h2>What you want</h2>
+<p class="muted" style="font-size:14px">These questions separate an increase from a secondary from a
+supplemental from a higher-level review. They all sound like "more money for my rating."</p>
+<div class="check"><input type="checkbox" name="has_filed_before" id="hf"><label for="hf">I have filed a VA claim before</label></div>
+<div class="check"><input type="checkbox" name="has_existing_rating" id="hr"><label for="hr">I already have a disability rating</label></div>
+<div><label>Current combined rating (%)</label><input type="number" name="combined_rating" min="0" max="100"></div>
+<div class="check"><input type="checkbox" name="claiming_worse" id="cw"><label for="cw">A condition I am <b>already rated for</b> got worse</label></div>
+<div class="check"><input type="checkbox" name="claiming_new" id="cn"><label for="cn">I have a <b>new</b> condition not on my rating</label></div>
+<div class="check"><input type="checkbox" name="caused_by_rated_condition" id="cb"><label for="cb">The new condition was <b>caused by</b> a condition I am already rated for (secondary)</label></div>
+<div class="check"><input type="checkbox" name="disagrees_with_decision" id="dd"><label for="dd">I disagree with a decision VA already made</label></div>
+<div><label>Decision date on the letter</label><input type="date" name="decision_date"></div>
+<div class="check"><input type="checkbox" name="has_new_evidence" id="ne"><label for="ne">I have evidence VA has not seen</label></div>
+<div class="check"><input type="checkbox" name="wants_judge" id="wj"><label for="wj">I want a judge to look at it</label></div>
+
+<h2>Your situation</h2>
+<div class="check"><input type="checkbox" name="private_treatment" id="pt"><label for="pt">I see civilian (non-VA) doctors for this</label></div>
+<div class="check"><input type="checkbox" name="unemployable" id="un"><label for="un">My conditions keep me from holding a job</label></div>
+<div class="check"><input type="checkbox" name="has_dependents" id="hd"><label for="hd">I have a spouse, children, or a dependent parent</label></div>
+<div class="check"><input type="checkbox" name="has_witness" id="hw"><label for="hw">Someone witnessed what happened to me</label></div>
+
+<h3>Dates that start their own clocks</h3>
+<div class="grid2">
+  <div><label>Intent to File (21-0966) filed on</label><input type="date" name="itf_filed_on"></div>
+  <div><label>POA (21-22) filed on</label><input type="date" name="poa_filed_on"></div>
+  <div><label>Records release (21-4142) signed on</label><input type="date" name="records_auth_signed_on"></div>
+</div>
+
+<h2>What happened in service</h2>
+<div><label>Short title</label><input type="text" name="event_title" placeholder="Convoy IED blast"></div>
+<div><label>What happened, in your own words</label><textarea name="event_description" rows="3"></textarea></div>
+<div class="grid2">
+  <div><label>Roughly when</label><input type="date" name="event_date"></div>
+  <div><label>Where</label><input type="text" name="event_location"></div>
+</div>
+<div><label>Anyone who saw it</label><input type="text" name="event_witnesses"></div>
+<div class="check"><input type="checkbox" name="event_documented" id="ed"><label for="ed">This is in my service records</label></div>
+
+<h2>Conditions you are claiming</h2>
+{% for i in [1,2,3] %}
+<div class="card">
+  <div class="eyebrow">Condition {{ i }}{% if i > 1 %} (optional){% endif %}</div>
+  <div class="grid2">
+    <div><label>Name</label><input type="text" name="condition_{{ i }}_name" placeholder="Tinnitus"></div>
+    <div><label>Diagnosis (if any)</label><input type="text" name="condition_{{ i }}_diagnosis"></div>
+  </div>
+  <div><label>How does it affect you today</label><textarea name="condition_{{ i }}_symptoms" rows="2"></textarea></div>
+  <div><label>When did it start</label><input type="date" name="condition_{{ i }}_onset"></div>
+  <div class="check"><input type="checkbox" name="condition_{{ i }}_started" id="s{{ i }}"><label for="s{{ i }}">Started during service</label></div>
+  <div class="check"><input type="checkbox" name="condition_{{ i }}_worsened" id="w{{ i }}"><label for="w{{ i }}">Service made it worse</label></div>
+  <div class="check"><input type="checkbox" name="condition_{{ i }}_treated" id="t{{ i }}"><label for="t{{ i }}">I am being treated for it now</label></div>
+</div>
+{% endfor %}
+
+<h2>Documents you already have</h2>
+<div class="grid2">
+  <div class="check"><input type="checkbox" name="have_dd214" id="e1"><label for="e1">DD-214</label></div>
+  <div class="check"><input type="checkbox" name="have_service_treatment_record" id="e2"><label for="e2">Service treatment records</label></div>
+  <div class="check"><input type="checkbox" name="have_current_medical_record" id="e3"><label for="e3">Current medical records</label></div>
+  <div class="check"><input type="checkbox" name="have_nexus_letter" id="e4"><label for="e4">Nexus letter</label></div>
+  <div class="check"><input type="checkbox" name="have_buddy_statement" id="e5"><label for="e5">Buddy statement</label></div>
+  <div class="check"><input type="checkbox" name="have_personal_statement" id="e6"><label for="e6">Personal statement</label></div>
+  <div class="check"><input type="checkbox" name="have_hearing_test" id="e7"><label for="e7">Hearing test</label></div>
+  <div class="check"><input type="checkbox" name="have_mental_health_evaluation" id="e8"><label for="e8">Mental health evaluation</label></div>
+  <div class="check"><input type="checkbox" name="have_imaging" id="e9"><label for="e9">Imaging (X-ray, MRI, CT)</label></div>
+  <div class="check"><input type="checkbox" name="have_private_doctor_note" id="e10"><label for="e10">Private doctor's note</label></div>
+</div>
+
+<p style="margin-top:26px"><button type="submit">See my lane and checklist</button></p>
+</form>
+{% endblock %}

@@ -1,0 +1,20 @@
+# Core (models, rules, CLI, storage)
+pydantic>=2.9
+typer>=0.12
+
+# Web frontend
+fastapi>=0.115
+uvicorn>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+
+# Config
+python-dotenv>=1.0
+
+# Tests
+pytest>=8.3
+httpx2>=0.1          # required by fastapi's TestClient
+
+# Optional, for later: a hosted database
+# sqlalchemy>=2.0
+# psycopg[binary]>=3.2

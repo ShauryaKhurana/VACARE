@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+
+# Build / IDE
+.idea/
+.vscode/
+.pytest_cache/
+.mypy_cache/
+
+# Output
+/dist/
+/build/
+
+# VACARE output
+vacare.db
+claim_summary.txt
+claim_payload.json
+*_packet.txt

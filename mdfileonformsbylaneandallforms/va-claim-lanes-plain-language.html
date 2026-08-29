@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VA Compensation Claims — Lanes, Forms, and Who Fills What</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Archivo:wght@500;800&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #191c20;
+    --muted: #62666d;
+    --paper: #ffffff;
+    --rule: #d9d7d2;
+    --you: #1d4fc4;      /* signature-ink blue */
+    --doc: #1e6f45;      /* physician green */
+    --emp: #8a5a12;      /* employer ochre */
+    --wit: #6b3fa0;      /* witness violet */
+    --va:  #62666d;      /* VA gray */
+    --lock: #b3261e;     /* stamp red */
+    --wash: #f6f5f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Public Sans", -apple-system, sans-serif;
+    color: var(--ink); background: var(--paper);
+    margin: 0; padding: 48px 22px 80px;
+    line-height: 1.5; font-size: 15.5px;
+  }
+  .sheet { max-width: 780px; margin: 0 auto; }
+
+  /* header */
+  .eyebrow { font-family: "Courier Prime", monospace; font-size: 12px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  h1 { font-family: "Archivo", sans-serif; font-weight: 800; font-size: clamp(26px, 5vw, 38px); line-height: 1.08; margin: 6px 0 10px; letter-spacing: -0.01em; }
+  .intro { color: var(--muted); max-width: 620px; margin: 0 0 22px; }
+
+  /* who-fills legend + badges */
+  .badge {
+    display: inline-block; font-family: "Courier Prime", monospace; font-weight: 700;
+    font-size: 11px; letter-spacing: .1em; padding: 2px 8px 1px;
+    border: 1.6px solid currentColor; border-radius: 3px; text-transform: uppercase;
+    vertical-align: middle; white-space: nowrap; background: #fff;
+  }
+  .b-you { color: var(--you); } .b-doc { color: var(--doc); } .b-emp { color: var(--emp); }
+  .b-wit { color: var(--wit); } .b-va  { color: var(--va); }  .b-lock { color: var(--lock); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 14px 16px; background: var(--wash); border-radius: 6px; margin-bottom: 40px; font-size: 13px; align-items: center; }
+  .legend span.lbl { color: var(--muted); }
+
+  /* glossary */
+  .glossary { border: 2px solid var(--ink); border-radius: 8px; padding: 22px 24px 8px; margin: 0 0 52px; }
+  .glossary h2 { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 19px; margin: 0 0 4px; }
+  .glossary .gsub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+  .gitem { padding: 13px 0 14px; border-top: 1px solid var(--rule); }
+  .gitem .gname { font-weight: 700; }
+  .gitem .form { font-family: "Courier Prime", monospace; font-weight: 700; font-size: 14px; }
+  .gitem p { margin: 4px 0 0; color: #33373d; font-size: 14.5px; }
+  .not-a-form { font-family: "Courier Prime", monospace; font-size: 12px; color: var(--lock); letter-spacing: .06em; }
+
+  /* lanes */
+  .lane { margin: 0 0 56px; }
+  .lane-head { border-bottom: 3px solid var(--ink); padding-bottom: 8px; margin-bottom: 4px; }
+  .lane-no { font-family: "Courier Prime", monospace; font-size: 12px; letter-spacing: .14em; color: var(--muted); }
+  .lane h2 { font-family: "Archivo", sans-serif; font-weight: 800; font-size: clamp(21px, 4vw, 27px); margin: 2px 0 4px; }
+  .lane .what { color: var(--muted); font-size: 14.5px; margin: 0 0 18px; }
+
+  /* sequence rail */
+  .rail { list-style: none; margin: 0; padding: 0; }
+  .rail li { position: relative; padding: 0 0 20px 44px; }
+  .rail li::before {
+    content: attr(data-n);
+    position: absolute; left: 0; top: 0;
+    width: 28px; height: 28px; border: 2px solid var(--ink); border-radius: 50%;
+    font-family: "Courier Prime", monospace; font-weight: 700; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; background: #fff; z-index: 1;
+  }
+  .rail li::after {
+    content: ""; position: absolute; left: 13.5px; top: 30px; bottom: -2px;
+    width: 2px; background: var(--rule);
+  }
+  .rail li:last-child::after { display: none; }
+  .rail li.gate::before { border-style: dashed; color: var(--lock); border-color: var(--lock); }
+  .step-title { font-weight: 700; }
+  .step-title .form { font-family: "Courier Prime", monospace; font-size: 14.5px; }
+  .rail p { margin: 3px 0 0; font-size: 14.5px; color: #33373d; max-width: 640px; }
+  .skipnote { font-size: 13px; color: var(--muted); font-style: italic; }
+  .locknote { color: var(--lock); font-weight: 600; }
+
+  .branch { background: var(--wash); border-radius: 6px; padding: 12px 16px; margin: 6px 0 0; font-size: 14px; }
+  .branch b { font-family: "Courier Prime", monospace; font-weight: 700; }
+
+  /* lane 5 chooser */
+  .choose { display: grid; gap: 12px; margin-top: 4px; }
+  .opt { border: 1.6px solid var(--ink); border-radius: 8px; padding: 16px 18px; }
+  .opt .form { font-family: "Courier Prime", monospace; font-weight: 700; font-size: 15px; }
+  .opt .oname { font-weight: 700; }
+  .opt p { margin: 5px 0 0; font-size: 14.5px; color: #33373d; }
+  .clock { font-family: "Courier Prime", monospace; font-size: 12px; color: var(--lock); letter-spacing: .05em; }
+
+  /* add-ons */
+  .addons h2 { font-family: "Archivo", sans-serif; font-weight: 800; font-size: clamp(21px, 4vw, 27px); border-bottom: 3px solid var(--ink); padding-bottom: 8px; margin: 0 0 4px; }
+  .addons .what { color: var(--muted); font-size: 14.5px; margin: 0 0 18px; }
+  .addon { border-top: 1px solid var(--rule); padding: 16px 0 18px; }
+  .addon .trigger { font-weight: 700; font-size: 16px; }
+  .addon .forms { margin: 6px 0 2px; font-size: 14.5px; }
+  .addon .form { font-family: "Courier Prime", monospace; font-weight: 700; }
+  .addon p { margin: 4px 0 0; font-size: 14px; color: #33373d; max-width: 640px; }
+
+  .foot { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--muted); }
+  @media print { body { padding: 0; font-size: 12px; } .lane { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="eyebrow">Shire · Internal Reference · Aug 2026</div>
+<h1>VA compensation claims, in plain language</h1>
+<p class="intro">Five lanes, what each form actually is, and who physically fills it out. Core disability compensation only. Add-on benefits at the end.</p>
+
+<div class="legend">
+  <span class="lbl">Who fills it:</span>
+  <span class="badge b-you">Veteran</span>
+  <span class="badge b-doc">Doctor</span>
+  <span class="badge b-emp">Employer</span>
+  <span class="badge b-wit">Witness</span>
+  <span class="badge b-va">VA</span>
+  <span class="badge b-lock">Hard rule</span>
+</div>
+
+<!-- ============ GLOSSARY ============ -->
+<div class="glossary">
+  <h2>The four documents everyone mixes up</h2>
+  <p class="gsub">They all sound like "a statement about my claim." They are four different things.</p>
+
+  <div class="gitem">
+    <span class="gname">Statement in Support of Claim</span> · <span class="form">21-4138</span> · <span class="badge b-you">Veteran</span>
+    <p>A blank page with your name on it. The veteran writes anything in their own words: how the knee actually feels, why the dates in the record are wrong, what daily life looks like. No medical weight. <b>This is not the nexus letter.</b></p>
+  </div>
+
+  <div class="gitem">
+    <span class="gname">Buddy statement</span> · <span class="form">21-10210</span> · <span class="badge b-wit">Witness</span>
+    <p>Same idea, different author. A spouse, squadmate, or supervisor writes what <em>they</em> saw and signs it themselves. "I served with him in 2019 and watched the accident happen." Firsthand observation only.</p>
+  </div>
+
+  <div class="gitem">
+    <span class="gname">Nexus letter</span> · <span class="not-a-form">no form number exists</span> · <span class="badge b-doc">Doctor</span>
+    <p>A letter on a doctor's letterhead connecting the condition to service, using the magic words "at least as likely as not." This is the link between diagnosis and service, and in a contested claim it's the most valuable page in the file. VA never hands you a form for it because VA doesn't ask for it; you bring it.</p>
+  </div>
+
+  <div class="gitem">
+    <span class="gname">DBQ (Disability Benefits Questionnaire)</span> · <span class="form">21-0960 series</span> · <span class="badge b-doc">Doctor</span>
+    <p>A checkbox exam form, one version per condition (~70 of them). A doctor scores your symptoms against VA's exact rating criteria. It measures <em>how bad</em>, while the nexus letter argues <em>why it's service-connected</em>. Different jobs.</p>
+  </div>
+
+  <div class="gitem">
+    <span class="gname">C&amp;P exam</span> · <span class="not-a-form">not a form at all</span> · <span class="badge b-va">VA</span>
+    <p>The exam VA schedules with its own examiner after you file. You attend, they write it up. <span class="locknote">Skipping it without good cause sinks the claim.</span></p>
+  </div>
+</div>
+
+<!-- ============ LANE 1 ============ -->
+<div class="lane">
+  <div class="lane-head">
+    <div class="lane-no">LANE 1</div>
+    <h2>"I'm getting out"</h2>
+  </div>
+  <p class="what">Filing before separation so the rating decision lands right around discharge day. The claim form is the same one used everywhere else; the timing is what's special.</p>
+  <ol class="rail">
+    <li data-n="1" class="gate">
+      <span class="step-title">Check the window <span class="badge b-lock">180–90 days out</span></span>
+      <p>BDD only exists between 180 and 90 days before separation. Day 89? Same paperwork, slower track. In a medical board (MEB/IDES)? Different lane entirely — the claim rides on <b style="font-family:'Courier Prime'">21-0819</b> and DoD runs the exams.</p>
+    </li>
+    <li data-n="2">
+      <span class="step-title">Hire your rep · <span class="form">21-22</span> <span class="badge b-you">Veteran</span> + VSO signs</span>
+      <p>Legal permission for a Veterans Service Officer to file for you and see your file. Free. <span class="skipnote">Skip if going alone.</span></p>
+    </li>
+    <li data-n="3">
+      <span class="step-title">File the claim · <span class="form">21-526EZ</span> <span class="badge b-you">Veteran</span></span>
+      <p>The master application: every condition being claimed, listed on one form. For BDD it must go in with <em>complete</em> service treatment records attached, including anything a Guard or Reserve unit is sitting on. Incomplete records = ejected from BDD.</p>
+    </li>
+    <li data-n="4" class="gate">
+      <span class="step-title">Stay available for exams <span class="badge b-lock">45 days</span></span>
+      <p>VA schedules the C&amp;P exams before separation. Unreachable or on terminal leave somewhere else = ejected from BDD.</p>
+    </li>
+    <li data-n="5">
+      <span class="step-title">Separate; DD-214 closes the loop <span class="badge b-va">VA</span></span>
+      <p>Rating decision targets the days right after discharge. Pay starts from day one of civilian life.</p>
+    </li>
+  </ol>
+  <div class="branch">If any claimed condition is mental health: add <b>21-0781</b>, the stressor statement — the veteran describes the event(s) behind it so VA can verify them in unit records.</div>
+</div>
+
+<!-- ============ LANE 2 ============ -->
+<div class="lane">
+  <div class="lane-head">
+    <div class="lane-no">LANE 2</div>
+    <h2>"I've never filed"</h2>
+  </div>
+  <p class="what">The first claim after service. The work is proving three things: a current diagnosis, something that happened in service, and a link between the two.</p>
+  <ol class="rail">
+    <li data-n="1">
+      <span class="step-title">Raise your hand · <span class="form">21-0966</span> Intent to File <span class="badge b-you">Veteran</span></span>
+      <p>One page, no evidence, no conditions listed. It locks today's date so that when the claim is approved months later, back pay runs from now. Good for 12 months. Costs nothing; skipping it costs money.</p>
+    </li>
+    <li data-n="2">
+      <span class="step-title">Hire your rep · <span class="form">21-22</span> <span class="badge b-you">Veteran</span> + VSO signs</span>
+      <p><span class="skipnote">Or 21-22a for a private attorney or claims agent. One rep at a time — filing a new one silently fires the old one.</span></p>
+    </li>
+    <li data-n="3">
+      <span class="step-title">Unlock private records · <span class="form">21-4142</span> + <span class="form">21-4142a</span> <span class="badge b-you">Veteran</span></span>
+      <p>The permission slip that lets VA pull records straight from civilian doctors and hospitals. The 4142 is the signature; the 4142a is the list of who to call. <span class="locknote">The signature expires after 12 months</span> — long claims may need a fresh one.</p>
+    </li>
+    <li data-n="4">
+      <span class="step-title">File the claim · <span class="form">21-526EZ</span> <span class="badge b-you">Veteran</span></span>
+      <p>List every condition. The form also asks a question worth understanding: "Fully Developed Claim" means "I've attached everything, don't go looking" — faster if true, quietly downgraded to standard if VA has to fetch anything.</p>
+    </li>
+    <li data-n="5" class="gate">
+      <span class="step-title">Show up to the C&amp;P exam <span class="badge b-lock">No-show = decided without you</span></span>
+      <p>VA's examiner, VA's schedule. On a first claim a miss means they decide on whatever paper exists.</p>
+    </li>
+  </ol>
+  <div class="branch">Mental health condition: add <b>21-0781</b> (veteran). Someone saw what happened: add a buddy statement, <b>21-10210</b> (the witness fills and signs it, not the veteran). Anything that needs saying in plain words: <b>21-4138</b> (veteran).</div>
+</div>
+
+<!-- ============ LANE 3 ============ -->
+<div class="lane">
+  <div class="lane-head">
+    <div class="lane-no">LANE 3</div>
+    <h2>"I got worse"</h2>
+  </div>
+  <p class="what">Already rated for a condition; asking for a higher percentage because it deteriorated. Shortest paperwork stack of all the lanes — the fight is entirely about evidence of severity.</p>
+  <ol class="rail">
+    <li data-n="1">
+      <span class="step-title">Gather proof it's worse <span class="badge b-you">Veteran</span> <span class="badge b-doc">Doctor</span></span>
+      <p>Recent treatment records, and ideally a DBQ where a doctor scores the condition against VA's own criteria. "Trust me, it's worse" loses; measurements win. Private records need a fresh <b style="font-family:'Courier Prime'">21-4142</b>.</p>
+    </li>
+    <li data-n="2">
+      <span class="step-title">File the claim · <span class="form">21-526EZ</span> <span class="badge b-you">Veteran</span></span>
+      <p>Same master form, marked as a claim for increase on the listed condition.</p>
+    </li>
+    <li data-n="3" class="gate">
+      <span class="step-title">Show up to the C&amp;P exam <span class="badge b-lock">No-show on an increase = denial</span></span>
+      <p>Harsher rule than first claims: missing this one can end it outright.</p>
+    </li>
+  </ol>
+  <div class="branch"><span class="locknote">Fair warning to build into UX:</span> asking for an increase reopens the rating for review. Ratings held under 5 years have little protection against being lowered instead.</div>
+</div>
+
+<!-- ============ LANE 4 ============ -->
+<div class="lane">
+  <div class="lane-head">
+    <div class="lane-no">LANE 4</div>
+    <h2>"Something new came up"</h2>
+  </div>
+  <p class="what">A condition not yet on the rating — either standalone, or caused by one that is (sleep apnea from the rated rhinitis, depression from the chronic pain). Veterans rarely know the "caused by" version exists, and it's often the easier win.</p>
+  <ol class="rail">
+    <li data-n="1">
+      <span class="step-title">Get the connecting opinion — the nexus letter <span class="badge b-doc">Doctor</span></span>
+      <p>No VA form. A doctor writes, on letterhead, that the new condition is "at least as likely as not" caused or aggravated by service or by the already-rated condition. For a secondary claim this letter basically <em>is</em> the claim.</p>
+    </li>
+    <li data-n="2">
+      <span class="step-title">Unlock the records · <span class="form">21-4142</span> + <span class="form">21-4142a</span> <span class="badge b-you">Veteran</span></span>
+      <p>Same permission slip as Lane 2, covering the doctors treating the new condition.</p>
+    </li>
+    <li data-n="3">
+      <span class="step-title">File the claim · <span class="form">21-526EZ</span> <span class="badge b-you">Veteran</span></span>
+      <p>New condition listed; for secondary, named alongside the service-connected condition causing it.</p>
+    </li>
+    <li data-n="4" class="gate">
+      <span class="step-title">Show up to the C&amp;P exam <span class="badge b-lock">Same no-show rule</span></span>
+      <p></p>
+    </li>
+  </ol>
+</div>
+
+<!-- ============ LANE 5 ============ -->
+<div class="lane">
+  <div class="lane-head">
+    <div class="lane-no">LANE 5</div>
+    <h2>"They got it wrong"</h2>
+  </div>
+  <p class="what">Denied, or rated lower than deserved. One decision to make, three doors, and the right door depends on a single question: <b>is there evidence VA hasn't seen?</b> Every clock starts on the decision letter's date.</p>
+  <div class="choose">
+    <div class="opt">
+      <span class="form">20-0995</span> · <span class="oname">Supplemental Claim</span> <span class="badge b-you">Veteran</span><br>
+      <span class="clock">FILE WITHIN 1 YEAR TO KEEP THE ORIGINAL PAY DATE</span>
+      <p><b>"Here's something you haven't seen."</b> New evidence goes in — a nexus letter, new records, a buddy statement — and a rater decides again. The default door: most disagreements have at least one new piece of paper. Filing late is allowed but resets the back-pay clock.</p>
+    </div>
+    <div class="opt">
+      <span class="form">20-0996</span> · <span class="oname">Higher-Level Review</span> <span class="badge b-you">Veteran</span><br>
+      <span class="clock">HARD 1-YEAR DEADLINE · NO NEW EVIDENCE ACCEPTED</span>
+      <p><b>"Same file, look again — you made a mistake."</b> A senior rater rereads exactly what's already there. Nothing new may be added, so this only works when the error is visible in the existing record.</p>
+    </div>
+    <div class="opt">
+      <span class="form">10182</span> · <span class="oname">Board Appeal</span> <span class="badge b-you">Veteran</span><br>
+      <span class="clock">HARD 1-YEAR DEADLINE · PICK A DOCKET ON THE FORM</span>
+      <p><b>"I want a judge."</b> A Veterans Law Judge decides. The form itself asks which flavor: judge reads the file as-is (fastest), 90 days to add evidence, or a hearing. Slowest door, strongest review. Can't take this door twice in a row.</p>
+    </div>
+  </div>
+  <div class="branch" style="margin-top:12px">Decision dated before Feb 19, 2019 and still grinding through the old system: the legacy pair is <b>21-0958</b> then <b>VA Form 9</b>. Shrinking population, not zero.</div>
+</div>
+
+<!-- ============ ADD-ONS ============ -->
+<div class="addons">
+  <h2>Add-ons</h2>
+  <p class="what">Extra money or benefits stacked onto a compensation claim. Each rides on the 21-526EZ or follows a rating; each has its own form and, often, its own author.</p>
+
+  <div class="addon">
+    <div class="trigger">"My conditions keep me from holding a job" — TDIU (paid at the 100% rate)</div>
+    <div class="forms"><span class="form">21-8940</span> <span class="badge b-you">Veteran</span> &nbsp;+&nbsp; <span class="form">21-4192</span> <span class="badge b-emp">Employer</span></div>
+    <p>The 8940 is the veteran's work history and why work is impossible. The 4192 is the employer's side — last employer(s) confirm dates, duties, why it ended. <b>VA won't grant unemployability without the 8940, even when the file screams it.</b> After a grant, <span class="form">21-4140</span> arrives annually to confirm still-not-working; ignoring it triggers a reduction.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I need help with daily living, or can't leave the house" — Aid &amp; Attendance</div>
+    <div class="forms"><span class="form">21-2680</span> <span class="badge b-doc">Doctor</span> &nbsp;·&nbsp; nursing home: <span class="form">21-0779</span> <span class="badge b-emp">Facility</span></div>
+    <p>The veteran cannot self-complete either one. The 2680 is an exam a physician performs and signs; the 0779 is filled out by the nursing home's office. The product's job here is routing paper to the right third party and chasing it.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I have a spouse / kids / dependent parent" — extra monthly pay at 30%+</div>
+    <div class="forms"><span class="form">21-686c</span> <span class="badge b-you">Veteran</span> &nbsp;·&nbsp; student child 18–23: <span class="form">21-674</span> <span class="badge b-you">Veteran</span></div>
+    <p>Only pays once the combined rating hits 30%. <span class="locknote">The money rule:</span> filed within 1 year of the decision that crossed 30%, the extra pay is retroactive to the rating date. Filed later, it only runs from filing day. VA occasionally sends <span class="form">21-0538</span> to reverify.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I need my home adapted" — SAH/SHA housing grant</div>
+    <div class="forms"><span class="form">26-4555</span> <span class="badge b-you">Veteran</span></div>
+    <p>For specific severe service-connected losses (limbs, blindness, certain burns). Comes <em>after</em> the qualifying rating exists, not with the claim.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I need an adapted vehicle" — auto allowance + adaptive equipment</div>
+    <div class="forms"><span class="form">21-4502</span> <span class="badge b-you">Veteran</span> + VA certifies &nbsp;·&nbsp; equipment only: <span class="form">10-1394</span> <span class="badge b-you">Veteran</span></div>
+    <p>One-time payment toward a vehicle for qualifying losses. <span class="locknote">Buy the car before VA approves and the money is gone</span> — approval first, purchase second, no exceptions. Adaptive equipment (10-1394) is separate and repeatable.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"My prosthetic/brace/skin meds destroy my clothes" — annual clothing allowance</div>
+    <div class="forms"><span class="form">10-8678</span> <span class="badge b-you">Veteran</span></div>
+    <p>Small yearly payment. <span class="locknote">Deadline is August 1, every year.</span> Miss it, wait twelve months.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I just had surgery / a long hospitalization for a rated condition" — temporary 100%</div>
+    <div class="forms">no dedicated form — <span class="form">21-4138</span> <span class="badge b-you">Veteran</span> + hospital records</div>
+    <p>Full rate during recovery: 21+ days hospitalized, or convalescence after surgery. Claim within a year of the event for full back pay. Constantly missed because nothing prompts it.</p>
+  </div>
+
+  <div class="addon">
+    <div class="trigger">"I'm in the Guard/Reserve and drilled this year"</div>
+    <div class="forms"><span class="form">21-8951-2</span> <span class="badge b-you">Veteran</span></div>
+    <p>Can't collect drill pay and disability pay for the same days; this annual form waives one for the other. Housekeeping, but ignoring it creates a debt letter.</p>
+  </div>
+</div>
+
+<div class="foot">
+  Companion to <em>va-claim-forms-by-lane.md</em> (locks &amp; deadlines detail) and <em>va-forms-download-manifest.html</em> (PDF links). Form revisions current as of Aug 29, 2026.
+</div>
+
+</div>
+</body>
+</html>

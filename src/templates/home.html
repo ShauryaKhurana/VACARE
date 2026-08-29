@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Claims</h1>
+<p class="muted">Every claim in the local database.</p>
+{% if claims %}
+<table>
+  <tr><th>Claim</th><th>Veteran</th><th>Type</th><th>Status</th></tr>
+  {% for id, name, claim_type, status in claims %}
+  <tr>
+    <td><a href="/claim/{{ id }}" class="form-no">{{ id }}</a></td>
+    <td>{{ name }}</td>
+    <td>{{ claim_type.replace('_',' ') }}</td>
+    <td>{{ status.replace('_',' ') }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="wash">No claims yet.</div>
+{% endif %}
+<p style="margin-top:22px"><a href="/intake" class="btn">Start a new intake</a></p>
+{% endblock %}

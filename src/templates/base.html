@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}VACARE{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Archivo:wght@500;800&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#191c20; --muted:#62666d; --paper:#fff; --rule:#d9d7d2;
+    --you:#1d4fc4; --doc:#1e6f45; --emp:#8a5a12; --wit:#6b3fa0; --va:#62666d;
+    --lock:#b3261e; --wash:#f6f5f2; --ok:#1e6f45;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:"Public Sans",-apple-system,sans-serif; color:var(--ink); background:var(--paper);
+         margin:0; padding:32px 22px 80px; line-height:1.5; font-size:15.5px; }
+  .sheet { max-width:860px; margin:0 auto; }
+  a { color:var(--you); }
+  .eyebrow { font-family:"Courier Prime",monospace; font-size:12px; letter-spacing:.14em;
+             color:var(--muted); text-transform:uppercase; }
+  h1 { font-family:"Archivo",sans-serif; font-weight:800; font-size:clamp(24px,5vw,34px);
+       line-height:1.1; margin:6px 0 10px; }
+  h2 { font-family:"Archivo",sans-serif; font-weight:800; font-size:20px;
+       border-bottom:3px solid var(--ink); padding-bottom:6px; margin:38px 0 12px; }
+  h3 { font-size:15px; margin:22px 0 6px; }
+  nav { font-size:13px; margin-bottom:18px; font-family:"Courier Prime",monospace; }
+  nav a { margin-right:16px; }
+  .badge { display:inline-block; font-family:"Courier Prime",monospace; font-weight:700; font-size:11px;
+           letter-spacing:.08em; padding:2px 7px 1px; border:1.6px solid currentColor; border-radius:3px;
+           text-transform:uppercase; white-space:nowrap; background:#fff; }
+  .b-veteran{color:var(--you);} .b-doctor{color:var(--doc);} .b-employer{color:var(--emp);}
+  .b-witness{color:var(--wit);} .b-va{color:var(--va);} .b-vso{color:var(--you);}
+  .b-facility{color:var(--emp);} .b-survivor{color:var(--wit);} .b-lock{color:var(--lock);}
+  .form-no { font-family:"Courier Prime",monospace; font-weight:700; }
+  .lock { color:var(--lock); font-weight:600; font-size:13.5px; }
+  .muted { color:var(--muted); }
+  .card { border:1.6px solid var(--ink); border-radius:8px; padding:16px 18px; margin-bottom:12px; }
+  .wash { background:var(--wash); border-radius:6px; padding:12px 16px; font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; padding:6px 8px; background:var(--wash); border-bottom:1px solid var(--rule); }
+  td { padding:6px 8px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  label { display:block; margin:10px 0 3px; font-size:13.5px; font-weight:600; }
+  input[type=text], input[type=date], input[type=number], select, textarea {
+    width:100%; padding:7px 9px; border:1.4px solid var(--rule); border-radius:5px;
+    font-family:inherit; font-size:14.5px; }
+  .check { display:flex; align-items:flex-start; gap:8px; margin:7px 0; font-size:14.5px; }
+  .check input { margin-top:3px; }
+  .check label { margin:0; font-weight:400; }
+  button, .btn { font-family:"Public Sans",sans-serif; font-weight:700; font-size:14.5px;
+                 padding:9px 16px; border-radius:6px; border:1.6px solid var(--ink);
+                 background:var(--ink); color:#fff; cursor:pointer; text-decoration:none;
+                 display:inline-block; }
+  .btn.ghost { background:#fff; color:var(--ink); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+  @media (max-width:620px){ .grid2 { grid-template-columns:1fr; } }
+  .rail { list-style:none; margin:0; padding:0; }
+  .rail li { position:relative; padding:0 0 18px 42px; }
+  .rail li::before { content:attr(data-n); position:absolute; left:0; top:0; width:27px; height:27px;
+    border:2px solid var(--ink); border-radius:50%; font-family:"Courier Prime",monospace;
+    font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center;
+    background:#fff; z-index:1; }
+  .rail li::after { content:""; position:absolute; left:13px; top:29px; bottom:-2px; width:2px;
+    background:var(--rule); }
+  .rail li:last-child::after { display:none; }
+  .rail li.gate::before { border-style:dashed; color:var(--lock); border-color:var(--lock); }
+  .rail p { margin:3px 0 0; font-size:14.5px; }
+  .dl { display:flex; justify-content:space-between; gap:12px; padding:9px 0;
+        border-bottom:1px solid var(--rule); font-size:14px; }
+  .days { font-family:"Courier Prime",monospace; font-weight:700; white-space:nowrap; }
+  .expired .days, .urgent .days { color:var(--lock); }
+  .soon .days { color:var(--emp); }
+  .ok .days { color:var(--ok); }
+  .banner { background:var(--wash); border-left:4px solid var(--ink); padding:10px 14px;
+            margin-bottom:18px; font-size:14px; }
+  .disclaimer { margin-top:44px; padding-top:14px; border-top:1px solid var(--rule);
+                font-size:12.5px; color:var(--muted); }
+  .score { font-family:"Courier Prime",monospace; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="eyebrow">VACARE &middot; claim prep</div>
+  <nav><a href="/">Claims</a><a href="/intake">New intake</a><a href="/forms">Form library</a></nav>
+  {% block content %}{% endblock %}
+  <div class="disclaimer">
+    VACARE helps organize a claim. It does not provide legal advice and cannot predict or guarantee
+    a VA decision. Deadlines shown are computed from the dates entered and must be confirmed by a
+    VSO or accredited representative before anything is filed.
+  </div>
+</div>
+</body>
+</html>
