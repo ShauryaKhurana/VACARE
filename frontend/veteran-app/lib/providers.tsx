@@ -5,14 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
 
 function AccessibilityEffects() {
-  const textSize = useAccessibilityStore((s) => s.textSize);
+  const textScale = useAccessibilityStore((s) => s.textScale);
   const highContrast = useAccessibilityStore((s) => s.highContrast);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("va-small-text", textSize === "small");
-    root.classList.toggle("va-large-text", textSize === "large");
-  }, [textSize]);
+    document.documentElement.style.setProperty("--va-text-scale", String(textScale / 100));
+  }, [textScale]);
 
   useEffect(() => {
     const root = document.documentElement;

@@ -10,7 +10,7 @@ export default function HelpPage() {
         Back to You
       </Link>
 
-      <h1 className="text-xl font-medium text-text-primary">Help</h1>
+      <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Help</h1>
       <p className="text-sm text-text-secondary">
         A path to a human, independent of the conversation in this app.
       </p>

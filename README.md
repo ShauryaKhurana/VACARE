@@ -97,3 +97,10 @@ python -m pytest tests -q
 Actual file uploads (evidence stores a path only), pre-filled form PDFs,
 decision-letter parsing, DBQ selection by diagnostic code, multi-user accounts
 and auth, and any LLM-backed free-text parsing.
+
+## Frontend
+
+`frontend/veteran-app/` is a Next.js frontend for the veteran-facing conversational intake
+flow described in the hackathon design docs. It currently runs against an in-repo mock API
+layer, not this Python backend — see `frontend/veteran-app/README.md` for setup and
+architecture.

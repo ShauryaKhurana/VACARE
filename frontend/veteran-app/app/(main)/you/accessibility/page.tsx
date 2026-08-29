@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { Toggle } from "@/components/shared/Toggle";
-import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
-import { cn } from "@/lib/utils";
+import {
+  useAccessibilityStore,
+  TEXT_SCALE_MIN,
+  TEXT_SCALE_MAX,
+  TEXT_SCALE_STEP,
+} from "@/lib/store/accessibilityStore";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 export default function AccessibilityPage() {
-  const textSize = useAccessibilityStore((s) => s.textSize);
-  const setTextSize = useAccessibilityStore((s) => s.setTextSize);
+  const textScale = useAccessibilityStore((s) => s.textScale);
+  const setTextScale = useAccessibilityStore((s) => s.setTextScale);
   const highContrast = useAccessibilityStore((s) => s.highContrast);
   const setHighContrast = useAccessibilityStore((s) => s.setHighContrast);
   const voiceInputDefault = useAccessibilityStore((s) => s.voiceInputDefault);
@@ -22,40 +26,40 @@ export default function AccessibilityPage() {
         Back to You
       </Link>
 
-      <h1 className="text-xl font-medium text-text-primary">Accessibility</h1>
+      <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Accessibility</h1>
 
       <section className="rounded-card border border-border bg-surface p-4">
-        <h2 className="mb-2 text-base font-medium text-text-primary">Text size</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium text-text-primary">Text size</h2>
+          <span className="text-sm text-text-secondary">{textScale}%</span>
+        </div>
+
         <div
-          className="flex divide-x divide-border overflow-hidden rounded-control border border-border"
-          role="radiogroup"
-          aria-label="Text size"
+          className="mb-2 flex items-center justify-center rounded-control bg-background py-6 text-text-primary"
+          style={{ fontSize: `${(17 * textScale) / 100}px` }}
+          aria-hidden="true"
         >
-          {(
-            [
-              { value: "small", glyph: "A−", fontSize: "14px", label: "Small text" },
-              { value: "default", glyph: "A", fontSize: "17px", label: "Default text size" },
-              { value: "large", glyph: "A+", fontSize: "20px", label: "Large text" },
-            ] as const
-          ).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={textSize === option.value}
-              aria-label={option.label}
-              onClick={() => setTextSize(option.value)}
-              className={cn(
-                "flex flex-1 items-center justify-center py-2.5 font-medium",
-                textSize === option.value
-                  ? "bg-accent-tint text-accent"
-                  : "text-text-secondary",
-              )}
-              style={{ fontSize: option.fontSize }}
-            >
-              {option.glyph}
-            </button>
-          ))}
+          Aa
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-text-secondary" aria-hidden="true">
+            A
+          </span>
+          <input
+            type="range"
+            min={TEXT_SCALE_MIN}
+            max={TEXT_SCALE_MAX}
+            step={TEXT_SCALE_STEP}
+            value={textScale}
+            onChange={(e) => setTextScale(Number(e.target.value))}
+            aria-label="Text size"
+            aria-valuetext={`${textScale}%`}
+            className="h-2 w-full flex-1 cursor-pointer accent-accent"
+          />
+          <span className="text-lg text-text-secondary" aria-hidden="true">
+            A
+          </span>
         </div>
       </section>
 

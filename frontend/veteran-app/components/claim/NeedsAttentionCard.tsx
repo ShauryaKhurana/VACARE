@@ -9,7 +9,7 @@ export function NeedsAttentionCard({ item }: { item: AttentionItem }) {
     <Card className="rounded-card border-warning/30 bg-warning/5">
       <CardContent className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-medium text-text-primary">{item.title}</h3>
+          <h3 className="min-w-0 flex-1 text-base font-medium text-text-primary">{item.title}</h3>
           <StatusTag variant="warning" label="Needs you" />
         </div>
         <p className="text-sm text-text-secondary">{item.detail}</p>

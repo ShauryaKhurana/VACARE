@@ -50,6 +50,13 @@ export function FixtureSwitcher({ current }: { current: string | null }) {
   );
 }
 
+/** The two fixture switchers use different key namespaces for the same three resolved routing ids -- this is the translation between them, used by ResolvedBanner's link into the decision page. */
+export const CLAIM_TO_DECISION_FIXTURE_KEY: Record<string, string> = {
+  "resolved-partial": "partial",
+  "resolved-full": "full",
+  "resolved-denied": "denied",
+};
+
 export const DECISION_FIXTURE_ROUTING_IDS: Record<string, string> = {
   partial: "route-resolved-partial",
   full: "route-resolved-full-grant",

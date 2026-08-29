@@ -3,7 +3,7 @@ import {
   defaultFixture,
   fixturesByRoutingId,
 } from "@/lib/api/mock/fixtures";
-import { getNextChatTurn } from "@/lib/api/mock/chatScript";
+import { getNextChatTurn, resetChatScript, chatMessagesKey } from "@/lib/api/mock/chatScript";
 
 export interface ApiClient {
   getClaim(routingId: RoutingId): Promise<Claim>;
@@ -43,7 +43,15 @@ class MockApiClient implements ApiClient {
     return delay({ vso: claim.vso });
   }
 
-  async deleteMyData(_routingId: RoutingId): Promise<void> {
+  async deleteMyData(routingId: RoutingId): Promise<void> {
+    // Actually remove what "Delete my data" promises to remove -- the
+    // routing identifier itself is cleared separately by the caller via
+    // sessionStore.clearSession(), but the conversation and script progress
+    // live here and were previously never touched by this call at all.
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(chatMessagesKey(routingId));
+    }
+    resetChatScript(routingId);
     return delay(undefined, 600);
   }
 }

@@ -18,9 +18,20 @@ interface SessionState {
    * "after first run," not before the veteran has actually started talking.
    */
   conversationStarted: boolean;
+  /**
+   * True once the veteran has confirmed and sent their claim to their VSO
+   * from Review. Submission is a one-way door (requirements doc, the
+   * walkthrough in Section 2.15): the dig doesn't reopen for free-form
+   * re-editing after this -- Talk switches to a status/relay mode instead,
+   * and any change goes to the VSO as a flagged request, not a silent edit.
+   */
+  claimSubmitted: boolean;
   startSession: () => void;
   completeOnboarding: () => void;
   markConversationStarted: () => void;
+  submitClaim: () => void;
+  /** Resets the claim/dig only -- keeps the same routing id ("account"), unlike clearSession. */
+  restartClaim: () => void;
   clearSession: () => void;
 }
 
@@ -37,14 +48,28 @@ export const useSessionStore = create<SessionState>()(
       routingId: null,
       onboardingComplete: false,
       conversationStarted: false,
+      claimSubmitted: false,
       startSession: () =>
         set((state) => ({
           routingId: state.routingId ?? generateRoutingId(),
         })),
       completeOnboarding: () => set({ onboardingComplete: true }),
       markConversationStarted: () => set({ conversationStarted: true }),
+      submitClaim: () => set({ claimSubmitted: true }),
+      // Chat/script storage cleanup is the caller's job (via apiClient.deleteMyData,
+      // same as the full delete-my-data flow reuses) -- this store only owns the
+      // session flags, matching clearSession's existing division of responsibility.
+      // conversationStarted deliberately stays true: it means "has this browser
+      // ever engaged," which restarting the dig doesn't undo -- resetting it
+      // would incorrectly hide the nav chrome for a clearly-returning user.
+      restartClaim: () => set({ onboardingComplete: false, claimSubmitted: false }),
       clearSession: () =>
-        set({ routingId: null, onboardingComplete: false, conversationStarted: false }),
+        set({
+          routingId: null,
+          onboardingComplete: false,
+          conversationStarted: false,
+          claimSubmitted: false,
+        }),
     }),
     { name: "veteran-app-session" },
   ),

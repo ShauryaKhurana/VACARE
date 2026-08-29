@@ -15,6 +15,7 @@ import {
   DECISION_FIXTURE_ROUTING_IDS,
 } from "@/components/dev/FixtureSwitcher";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { IconListDetails } from "@tabler/icons-react";
 
 export default function DecisionPage() {
   return (
@@ -59,7 +60,10 @@ function DecisionPageContent() {
       <RatingHeadline combinedRating={decision.combinedRating} monthlyAmount={decision.monthlyAmount} />
 
       <section>
-        <h2 className="mb-2 text-base font-medium text-text-primary">Condition by condition</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">
+          <IconListDetails size={20} className="text-text-secondary" aria-hidden="true" />
+          Condition by condition
+        </h2>
         <ul className="flex flex-col gap-2 md:grid md:grid-cols-2 md:gap-3">
           {decision.conditions.map((condition) => (
             <ConditionRow key={condition.id} condition={condition} />

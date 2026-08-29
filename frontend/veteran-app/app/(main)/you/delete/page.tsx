@@ -31,7 +31,7 @@ export default function DeletePage() {
   if (done) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <h1 className="text-xl font-medium text-text-primary">Your data has been deleted</h1>
+        <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Your data has been deleted</h1>
         <p className="max-w-sm text-sm text-text-secondary">
           What we held on our side is gone. Your claim record with VA and your VSO isn&apos;t
           affected -- that stays with them.
@@ -50,7 +50,7 @@ export default function DeletePage() {
         Back to You
       </Link>
 
-      <h1 className="text-xl font-medium text-text-primary">Delete my data</h1>
+      <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Delete my data</h1>
       <p className="text-sm text-text-secondary">
         This is a simple, honest control -- no maze, no retention tricks. It removes the routing
         identifier and conversation we hold.
@@ -60,7 +60,17 @@ export default function DeletePage() {
         <h2 className="text-sm font-medium text-text-primary">This does not affect</h2>
         <p className="mt-1 text-sm text-text-secondary">
           Your claim record with VA or your VSO -- that lives with them, not us, and stays exactly
-          as it is.
+          as it is. Your VSO already has everything they need to keep working your claim.
+        </p>
+      </div>
+
+      <div className="rounded-card border border-warning/30 bg-warning/5 p-4">
+        <h2 className="text-sm font-medium text-text-primary">What this means for you</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Once this is gone, we won&apos;t be able to recognize you or pick up where you left off --
+          this app has nothing left to connect you to your claim. For anything you need in the
+          meantime, reach out to your VSO directly. If you want to use this app again later,
+          you&apos;ll start over with a new conversation, same as a first visit.
         </p>
       </div>
 

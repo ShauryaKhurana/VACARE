@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Veteran App",
-    short_name: "Veteran App",
+    name: "VA CARE",
+    short_name: "VA CARE",
     description:
       "A free guide to help you file your VA claim, working with a real accredited Veteran Service Officer.",
     start_url: "/",

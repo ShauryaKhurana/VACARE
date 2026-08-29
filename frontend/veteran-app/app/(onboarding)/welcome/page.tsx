@@ -65,7 +65,7 @@ export default function WelcomePage() {
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
           <Icon size={32} aria-hidden="true" />
         </div>
-        <h1 className="text-xl font-medium text-text-primary">{card.heading}</h1>
+        <h1 className="text-2xl md:text-3xl font-medium text-text-primary">{card.heading}</h1>
         <p className="mt-3 text-base text-text-secondary">{card.body}</p>
       </div>
 

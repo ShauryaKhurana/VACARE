@@ -24,7 +24,7 @@ export default function VsoContactPage() {
         Back to You
       </Link>
 
-      <h1 className="text-xl font-medium text-text-primary">Your VSO</h1>
+      <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Your VSO</h1>
 
       {isLoading || !claim ? (
         <div

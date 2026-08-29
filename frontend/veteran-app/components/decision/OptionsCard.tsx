@@ -14,7 +14,7 @@ const OPTIONS = [
 export function OptionsCard({ vsoContactHref = "/you/vso-contact" }: { vsoContactHref?: string }) {
   return (
     <div className="rounded-card border border-border bg-surface p-4">
-      <h3 className="text-base font-medium text-text-primary">If you want to look at your options</h3>
+      <h3 className="text-lg font-medium text-text-primary">If you want to look at your options</h3>
       <p className="mt-1 text-sm text-text-secondary">
         You have about a year from this decision to protect your back-pay date if you choose to
         pursue one of these. Your VSO can walk through what fits your situation -- we don&apos;t

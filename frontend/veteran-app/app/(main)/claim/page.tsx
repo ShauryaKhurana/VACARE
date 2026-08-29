@@ -13,7 +13,7 @@ import { UpcomingCard } from "@/components/claim/UpcomingCard";
 import { UpdatesFeed } from "@/components/claim/UpdatesFeed";
 import { ResolvedBanner } from "@/components/claim/ResolvedBanner";
 import { FixtureSwitcher, CLAIM_FIXTURE_ROUTING_IDS } from "@/components/dev/FixtureSwitcher";
-import { IconMessageCircle2, IconBadge } from "@tabler/icons-react";
+import { IconMessageCircle2, IconBadge, IconAlertTriangle, IconCalendarEvent, IconHistory } from "@tabler/icons-react";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 export default function ClaimPage() {
@@ -61,7 +61,11 @@ function ClaimPageContent() {
         Working with {claim.vso.name}, {claim.vso.organization}
       </Link>
 
-      {claim.stage === "resolved" ? <ResolvedBanner /> : <StageBanner stage={claim.stage} />}
+      {claim.stage === "resolved" ? (
+        <ResolvedBanner fixtureOverride={fixtureOverride} />
+      ) : (
+        <StageBanner stage={claim.stage} />
+      )}
 
       <div className="rounded-card border border-border bg-surface p-4">
         <StageTimeline currentStage={claim.stage} />
@@ -69,7 +73,10 @@ function ClaimPageContent() {
 
       {claim.needsAttention.length > 0 && (
         <section>
-          <h2 className="mb-2 text-base font-medium text-text-primary">Needs your attention</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">
+            <IconAlertTriangle size={20} className="text-text-secondary" aria-hidden="true" />
+            Needs your attention
+          </h2>
           <div className="flex flex-col gap-2 md:grid md:grid-cols-2 md:gap-3">
             {claim.needsAttention.map((item) => (
               <NeedsAttentionCard key={item.id} item={item} />
@@ -80,7 +87,10 @@ function ClaimPageContent() {
 
       {claim.upcoming.length > 0 && (
         <section>
-          <h2 className="mb-2 text-base font-medium text-text-primary">Upcoming</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">
+            <IconCalendarEvent size={20} className="text-text-secondary" aria-hidden="true" />
+            Upcoming
+          </h2>
           <div className="flex flex-col gap-2 md:grid md:grid-cols-2 md:gap-3">
             {claim.upcoming.map((item) => (
               <UpcomingCard key={item.id} item={item} />
@@ -90,7 +100,10 @@ function ClaimPageContent() {
       )}
 
       <section>
-        <h2 className="mb-2 text-base font-medium text-text-primary">Updates</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">
+          <IconHistory size={20} className="text-text-secondary" aria-hidden="true" />
+          Updates
+        </h2>
         <div className="rounded-card border border-border bg-surface p-4">
           <UpdatesFeed updates={claim.updates} />
         </div>

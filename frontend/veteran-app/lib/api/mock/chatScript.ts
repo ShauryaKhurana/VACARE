@@ -108,15 +108,49 @@ const script: ChatMessage[][] = [
   ],
 ];
 
-const turnIndexByRoutingId = new Map<string, number>();
+function turnKey(routingId: string): string {
+  return `veteran-app-chat-turn-${routingId}`;
+}
+
+/** Shared with ChatThread (which persists the actual message history under this same key) so deleteMyData can clear both without duplicating the naming. */
+export function chatMessagesKey(routingId: string): string {
+  return `veteran-app-chat-${routingId}`;
+}
+
+/**
+ * Persisted to localStorage, not a module-level Map: an in-memory Map is
+ * wiped whenever this module gets re-evaluated -- every dev-mode Fast
+ * Refresh, but also, critically, every real page reload or reopened tab in
+ * production, since there is no server process holding it between requests.
+ * That silently reset the script back to turn 0 (the opening greeting) on
+ * every return visit, which looked exactly like the AI "forgetting" what it
+ * had just asked.
+ */
+function getStoredTurnIndex(routingId: string): number {
+  if (typeof window === "undefined") return 0;
+  const raw = window.localStorage.getItem(turnKey(routingId));
+  const parsed = raw ? Number(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setStoredTurnIndex(routingId: string, index: number): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(turnKey(routingId), String(index));
+}
 
 export function getNextChatTurn(routingId: string): ChatMessage[] {
-  const currentIndex = turnIndexByRoutingId.get(routingId) ?? 0;
+  const currentIndex = getStoredTurnIndex(routingId);
   const turn = script[Math.min(currentIndex, script.length - 1)];
-  turnIndexByRoutingId.set(routingId, Math.min(currentIndex + 1, script.length));
+  setStoredTurnIndex(routingId, Math.min(currentIndex + 1, script.length));
   return turn;
 }
 
 export function resetChatScript(routingId: string): void {
-  turnIndexByRoutingId.delete(routingId);
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(turnKey(routingId));
+}
+
+/** Rewinds the script to a specific turn instead of clearing it entirely -- backs Talk's "start over from a specific step," which redoes part of the dig rather than all of it. */
+export function rewindChatScript(routingId: string, toTurnIndex: number): void {
+  setStoredTurnIndex(routingId, Math.max(0, toTurnIndex));
 }

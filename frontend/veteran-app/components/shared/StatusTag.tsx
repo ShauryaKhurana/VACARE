@@ -44,12 +44,12 @@ export function StatusTag({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium",
         classes,
         className,
       )}
     >
-      <Icon size={13} stroke={2} aria-hidden="true" />
+      <Icon size={13} stroke={2} className="shrink-0" aria-hidden="true" />
       {label}
     </span>
   );

@@ -89,35 +89,41 @@
   }
   body {
     @apply bg-background text-text-primary;
-    font-size: 17px;
     line-height: 1.65;
   }
   html {
     @apply font-sans;
+    /* --va-text-scale is set here by AccessibilityEffects, a plain fraction
+       (1 = 100%) driven by the You > Accessibility text-size slider. This
+       has to live on the ROOT font-size, not body's -- Tailwind's text-*
+       utilities (text-sm, text-lg, text-2xl, ...) are all rem-based, and
+       rem is defined relative to the html element's font-size specifically,
+       never body's. Scaling body alone left every Tailwind-sized element
+       in the app (nearly everything) completely unaffected by the slider.
+       17px matches the Visual Design Plan's base size -- also fixes a
+       latent 1px mismatch where text-base (1rem) rendered at the browser's
+       16px default instead of the spec'd 17px. */
+    font-size: calc(17px * var(--va-text-scale, 1));
   }
 }
 
-/* Accessibility: text-size mode (A-/A/A+, Wireframe 10), toggled via a class on <html> */
-html.va-small-text body {
-  font-size: 15px;
-  line-height: 1.6;
-}
-html.va-large-text body {
-  font-size: 20px;
-  line-height: 1.7;
-}
-
-/* Accessibility: high-contrast mode */
+/* Accessibility: high-contrast mode. Every token that ever carries text or
+   a meaningful border is overridden here -- accent-tint and computed were
+   previously left at their low-contrast defaults, so turning high-contrast
+   on didn't actually raise the "Computed" tag's or the active nav row's
+   contrast at all. */
 html.va-high-contrast {
   --va-background: #ffffff;
   --va-surface: #ffffff;
   --va-border: #000000;
   --va-text-secondary: #2b2a28;
   --va-text-primary: #000000;
+  --va-accent-tint: #d6e4e1;
   --va-accent: #0b4a3f;
   --va-success: #0d5a11;
   --va-warning: #6b4400;
   --va-danger: #7a1f14;
+  --va-computed: #33366b;
 }
 
 /* Never rely on color alone: any status-driven element must combine

@@ -21,7 +21,7 @@ export function StatementBuilderCard({
   return (
     <Card className="rounded-card border-border">
       <CardContent className="flex flex-col gap-3 p-4">
-        <h3 className="text-base font-medium text-text-primary">Personal statement</h3>
+        <h3 className="text-lg font-medium text-text-primary">Personal statement</h3>
         <p className="text-sm text-text-secondary">{prompt}</p>
 
         {saved ? (

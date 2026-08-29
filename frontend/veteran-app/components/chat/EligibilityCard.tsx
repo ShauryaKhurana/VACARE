@@ -24,7 +24,7 @@ export function EligibilityCard({
   return (
     <Card className="rounded-card border-border">
       <CardContent className="flex flex-col gap-3 p-4">
-        <h3 className="text-base font-medium text-text-primary">
+        <h3 className="text-lg font-medium text-text-primary">
           You may automatically qualify for these
         </h3>
         <p className="text-sm text-text-secondary">

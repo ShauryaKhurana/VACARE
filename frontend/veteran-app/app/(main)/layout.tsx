@@ -30,11 +30,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const showChrome = mounted && (onboardingComplete || conversationStarted);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background md:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col bg-background md:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-control focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      >
+        Skip to main content
+      </a>
       {showChrome && <SideNav />}
-      <div className="flex min-h-dvh flex-1 flex-col md:min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col">
         <InstallPrompt />
-        <main className="flex flex-1 flex-col overflow-hidden md:bg-app-wash">{children}</main>
+        <main
+          id="main-content"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden md:bg-app-wash"
+        >
+          {children}
+        </main>
         {showChrome && <BottomNav />}
       </div>
     </div>

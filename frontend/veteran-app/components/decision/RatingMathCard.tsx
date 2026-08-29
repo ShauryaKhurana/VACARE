@@ -11,7 +11,7 @@ export function RatingMathCard({ steps }: { steps: { label: string; value: strin
     <Card className="rounded-card border-border">
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-medium text-text-primary">How we got to your rating</h3>
+          <h3 className="text-lg font-medium text-text-primary">How we got to your rating</h3>
           <ComputedTag />
         </div>
         <ol className="flex flex-col gap-2">

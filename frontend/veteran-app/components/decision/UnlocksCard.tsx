@@ -1,4 +1,4 @@
-import { IconCircleCheck } from "@tabler/icons-react";
+import { IconCircleCheck, IconKey } from "@tabler/icons-react";
 
 /** "What this unlocks" -- decision letters never mention this (HLD Section 4.6). */
 export function UnlocksCard({ unlocks }: { unlocks: string[] }) {
@@ -6,7 +6,10 @@ export function UnlocksCard({ unlocks }: { unlocks: string[] }) {
 
   return (
     <div className="rounded-card border border-border bg-surface p-4">
-      <h3 className="text-base font-medium text-text-primary">What this unlocks</h3>
+      <h3 className="flex items-center gap-2 text-lg font-medium text-text-primary">
+        <IconKey size={20} className="text-text-secondary" aria-hidden="true" />
+        What this unlocks
+      </h3>
       <ul className="mt-2 flex flex-col gap-2">
         {unlocks.map((item) => (
           <li key={item} className="flex items-start gap-2 text-sm text-text-primary">

@@ -7,7 +7,7 @@ import { AccentButton } from "@/components/shared/AccentButton";
 import { ComputedTag } from "@/components/shared/ComputedTag";
 import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
-import { IconPencil } from "@tabler/icons-react";
+import { IconPencil, IconArrowLeft } from "@tabler/icons-react";
 
 const SERVICE_INFO = [
   { label: "Branch", value: "U.S. Army" },
@@ -32,7 +32,7 @@ function Section({
   return (
     <section className="rounded-card border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium text-text-primary">{title}</h2>
+        <h2 className="text-lg font-medium text-text-primary">{title}</h2>
         <Link href={editHref} className="flex items-center gap-1 text-sm text-accent">
           <IconPencil size={14} aria-hidden="true" />
           Edit
@@ -47,6 +47,7 @@ export default function ReviewPage() {
   const router = useRouter();
   const routingId = useSessionStore((s) => s.routingId);
   const completeOnboarding = useSessionStore((s) => s.completeOnboarding);
+  const submitClaim = useSessionStore((s) => s.submitClaim);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
@@ -54,13 +55,20 @@ export default function ReviewPage() {
     setSubmitting(true);
     await apiClient.confirmClaimDraft(routingId);
     completeOnboarding();
+    submitClaim();
     router.push("/connect");
   }
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-6 md:max-w-2xl md:px-8 lg:max-w-3xl lg:px-12">
       <div>
-        <h1 className="text-xl font-medium text-text-primary">Review &amp; confirm</h1>
+        <Link href="/talk" className="flex w-fit items-center gap-1 text-sm text-text-secondary">
+          <IconArrowLeft size={16} aria-hidden="true" />
+          Back to conversation
+        </Link>
+        <h1 className="mt-2 text-2xl md:text-3xl font-medium text-text-primary">
+          Review &amp; confirm
+        </h1>
         <p className="mt-1 text-sm text-text-secondary">
           Take a look before this goes to your VSO -- everything here is editable.
         </p>
