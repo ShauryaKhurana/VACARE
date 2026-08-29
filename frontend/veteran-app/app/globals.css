@@ -69,6 +69,20 @@
   --va-computed: #6b6fa0;
 }
 
+/*
+ * Soft, on-brand ambient wash for the desktop content pane -- two large,
+ * low-opacity accent-tint blobs instead of flat empty background, so a
+ * sparse page (e.g. a fresh Talk conversation) reads as designed rather
+ * than unfinished. Desktop-only (applied via md:bg-app-wash); mobile stays
+ * flat per the mobile-first design.
+ */
+@utility bg-app-wash {
+  background-image:
+    radial-gradient(760px 480px at 8% -12%, color-mix(in srgb, var(--va-accent-tint) 70%, transparent), transparent 60%),
+    radial-gradient(680px 460px at 100% 112%, color-mix(in srgb, var(--va-accent-tint) 50%, transparent), transparent 55%);
+  background-repeat: no-repeat;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

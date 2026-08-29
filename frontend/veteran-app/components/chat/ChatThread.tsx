@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { IconMessageCircle2 } from "@tabler/icons-react";
 import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import type { ChatMessage } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { DocumentUploadCard } from "@/components/chat/DocumentUploadCard";
 import { ConfirmationCard } from "@/components/chat/ConfirmationCard";
@@ -82,10 +84,26 @@ export function ChatThread() {
     setLoading(false);
   }
 
+  const isSparse = messages.length <= 1 && !showResumeBanner;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-8 lg:px-12">
-        <div className="mx-auto flex max-w-xl flex-col gap-3 md:max-w-2xl lg:max-w-3xl">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-8 lg:px-12">
+        <div
+          className={cn(
+            "mx-auto flex w-full max-w-xl flex-1 flex-col gap-3 md:max-w-2xl lg:max-w-3xl",
+            isSparse && "md:justify-center",
+          )}
+        >
+          {isSparse && (
+            <div className="hidden flex-col items-center gap-3 pb-2 text-center md:flex">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
+                <IconMessageCircle2 size={30} aria-hidden="true" />
+              </div>
+              <p className="text-sm text-text-secondary">Let&apos;s get your claim started</p>
+            </div>
+          )}
+
           <ProgressChecklist completedSteps={stepsDone} />
 
           {showResumeBanner && (
