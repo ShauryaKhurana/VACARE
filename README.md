@@ -141,3 +141,10 @@ deliberately left blank. Chat sessions live in memory, so restarting the server
 loses an unfinished conversation. Still missing: POA revocation checks, chase
 states for third-party forms, DBQ selection by diagnostic code, form revision
 monitoring, and multi-user auth.
+
+## Frontend
+
+`frontend/veteran-app/` is a Next.js frontend for the veteran-facing conversational intake
+flow described in the hackathon design docs. It currently runs against an in-repo mock API
+layer, not this Python backend — see `frontend/veteran-app/README.md` for setup and
+architecture.
