@@ -11,6 +11,9 @@ python-multipart>=0.0.9
 # Config
 python-dotenv>=1.0
 
+# Document extraction (Gemini) and form filling
+pypdf>=5.0
+
 # Tests
 pytest>=8.3
 httpx2>=0.1          # required by fastapi's TestClient
