@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens, verbatim from the Visual Design Plan (Section 1-3).
+ * Tailwind v4 uses CSS-first config (@theme), which is why these are
+ * defined here rather than in a tailwind.config.ts JS file -- the LLD's
+ * Section 4 example predates the shadcn/Tailwind v4 scaffold actually
+ * used to build this app, but the token values themselves are identical.
+ *
+ * Enforced rule: only AccentButton, ComputedTag, and StatusTag are
+ * allowed to reference accent/computed/success/warning/danger directly.
+ * Every other component consumes color through those three components.
+ */
+@theme inline {
+  --color-background: var(--va-background);
+  --color-surface: var(--va-surface);
+  --color-border: var(--va-border);
+  --color-text-secondary: var(--va-text-secondary);
+  --color-text-primary: var(--va-text-primary);
+  --color-accent-tint: var(--va-accent-tint);
+  --color-accent: var(--va-accent);
+  --color-success: var(--va-success);
+  --color-warning: var(--va-warning);
+  --color-danger: var(--va-danger);
+  --color-computed: var(--va-computed);
+
+  /* shadcn primitive tokens, repointed at the veteran-app palette */
+  --color-foreground: var(--va-text-primary);
+  --color-card: var(--va-surface);
+  --color-card-foreground: var(--va-text-primary);
+  --color-popover: var(--va-surface);
+  --color-popover-foreground: var(--va-text-primary);
+  --color-primary: var(--va-accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--va-accent-tint);
+  --color-secondary-foreground: var(--va-accent);
+  --color-muted: var(--va-accent-tint);
+  --color-muted-foreground: var(--va-text-secondary);
+  --color-destructive: var(--va-danger);
+  --color-input: var(--va-border);
+  --color-ring: var(--va-accent);
+
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-heading: var(--font-public-sans), system-ui, sans-serif;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-sm: 6px;
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-card);
+  --radius-xl: 16px;
+}
+
+:root {
+  --va-background: #faf8f5;
+  --va-surface: #ffffff;
+  --va-border: #e4e1da;
+  --va-text-secondary: #6b6862;
+  --va-text-primary: #2b2a28;
+  --va-accent-tint: #e3eeec;
+  --va-accent: #2b6e63;
+  --va-success: #4b7a4e;
+  --va-warning: #b8862e;
+  --va-danger: #b4483b;
+  --va-computed: #6b6fa0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-text-primary;
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Accessibility: large-text mode, toggled via a class on <html> from accessibilityStore */
+html.va-large-text body {
+  font-size: 20px;
+  line-height: 1.7;
+}
+
+/* Accessibility: high-contrast mode */
+html.va-high-contrast {
+  --va-background: #ffffff;
+  --va-surface: #ffffff;
+  --va-border: #000000;
+  --va-text-secondary: #2b2a28;
+  --va-text-primary: #000000;
+  --va-accent: #0b4a3f;
+  --va-success: #0d5a11;
+  --va-warning: #6b4400;
+  --va-danger: #7a1f14;
+}
+
+/* Never rely on color alone: any status-driven element must combine
+   this reduced-motion query with icon/text, not a color swap in isolation. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
