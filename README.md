@@ -17,6 +17,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
+cp .env.example .env         # then paste your GEMINI_API_KEY into it
 python -m src.web            # web UI at http://127.0.0.1:8000
 python -m src.cli demo        # or the CLI: a filled-in sample claim and packet
 python -m src.cli intake      # guided terminal intake
@@ -28,10 +29,43 @@ python -m src.cli intake      # guided terminal intake
 
 | Page | What it does |
 | --- | --- |
-| `/intake` | Plain-language intake. The answers route the veteran into a lane |
+| `/chat` | **Conversational intake.** Four questions and two uploads; documents replace the rest |
+| `/intake` | The long form, kept as a no-AI fallback |
 | `/claim/{id}` | Lane, ordered form sequence with PDF links, deadline clocks, third-party chase list, evidence checklist, status history |
 | `/claim/{id}/packet` | The VSO packet as plain text |
 | `/forms` | All 42 forms, with who fills each one and its lock |
+| `/claim/{id}/526ez` | The **filled 21-526EZ PDF**, generated from the claim |
+
+## The chat intake
+
+The design rule is that nothing gets asked twice and nothing gets asked that a
+document can answer. A veteran with a DD-214 answers **four questions**:
+
+1. "In your own words, what happened and what's bothering you now?" - Gemini
+   extracts the conditions, the in-service event, onset dates, and the
+   situation flags (civilian treatment, dependents, witnesses, employability)
+2. Upload the DD-214 - name, date of birth, branch, service dates, and
+   discharge are read off it
+3. Current rating, or "none" - which alone implies whether they've filed before
+4. What brings them here - only asked if they already have a rating
+
+Everything else is derived. The separation date *is* the service end date, so
+it is one field. Uploading a decision letter sets the decision date and starts
+every clock that runs from it.
+
+Extraction runs at `temperature: 0` so the same document yields the same
+fields every time, and every extracted value is shown back for confirmation
+rather than silently trusted.
+
+## Gemini
+
+Set `GEMINI_API_KEY` in `.env` (gitignored). The default model is
+`gemini-3.7-flash`, overridable with `GEMINI_MODEL`. Gemini reads PDFs and
+photos natively, so there is no separate OCR step.
+
+Without a key the app still runs: lane routing, the checklist, the deadline
+clocks, the long-form intake, and form filling are all deterministic Python.
+Only the story parsing and document reading need the API.
 
 ## Commands
 
@@ -61,6 +95,13 @@ intake answers  ->  validated models  ->  evidence rules  ->  packet
                        (src/storage)
 ```
 
+- **`src/intake_chat.py`** - the conversation: which slots are still unknown,
+  and what to ask next.
+- **`src/extract.py`** - free text and documents to structured claim facts.
+- **`src/gemini.py`** - a small REST client; structured output and native PDF
+  reading, no SDK.
+- **`src/formfill.py`** - fills the 21-526EZ AcroForm and reports what it could
+  not fill.
 - **`src/lanes.py`** - routes a veteran into one of the five lanes, builds the
   ordered form sequence for that lane, and computes every deadline clock.
 - **`src/forms.py`** - the form catalog: number, title, who physically fills it,
@@ -94,6 +135,9 @@ python -m pytest tests -q
 
 ## Not built yet
 
-Actual file uploads (evidence stores a path only), pre-filled form PDFs,
-decision-letter parsing, DBQ selection by diagnostic code, multi-user accounts
-and auth, and any LLM-backed free-text parsing.
+Uploaded files are read and then discarded rather than stored. The 526EZ is
+filled but not signed or submitted, and the SSN and mailing address boxes are
+deliberately left blank. Chat sessions live in memory, so restarting the server
+loses an unfinished conversation. Still missing: POA revocation checks, chase
+states for third-party forms, DBQ selection by diagnostic code, form revision
+monitoring, and multi-user auth.

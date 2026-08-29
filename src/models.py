@@ -100,7 +100,9 @@ class Veteran(BaseModel):
     id: str = Field(default_factory=new_id)
     first_name: str
     last_name: str
-    dob: date
+    # Optional so a conversational intake can build a veteran progressively;
+    # the CLI and web form still require it up front.
+    dob: Optional[date] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     branch: Optional[Branch] = None
@@ -138,7 +140,9 @@ class Veteran(BaseModel):
 
     @field_validator("dob")
     @classmethod
-    def dob_must_be_plausible(cls, value: date) -> date:
+    def dob_must_be_plausible(cls, value: Optional[date]) -> Optional[date]:
+        if value is None:
+            return None
         today = date.today()
         if value >= today:
             raise ValueError("date of birth must be in the past")
@@ -148,7 +152,7 @@ class Veteran(BaseModel):
 
     @model_validator(mode="after")
     def service_dates_must_make_sense(self) -> "Veteran":
-        if self.service_start and self.service_start <= self.dob:
+        if self.dob and self.service_start and self.service_start <= self.dob:
             raise ValueError("service start date must be after date of birth")
         if self.service_start and self.service_end and self.service_end < self.service_start:
             raise ValueError("service end date cannot be before service start date")

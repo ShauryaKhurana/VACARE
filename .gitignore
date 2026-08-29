@@ -10,6 +10,7 @@ venv/
 .env
 .env.*
 !.env.example
+data.env
 
 # Database
 *.db
@@ -33,3 +34,6 @@ vacare.db
 claim_summary.txt
 claim_payload.json
 *_packet.txt
+
+# Cached blank VA form PDFs
+form_cache/
