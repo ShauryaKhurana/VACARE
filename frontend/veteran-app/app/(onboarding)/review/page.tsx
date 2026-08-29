@@ -56,7 +56,7 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-6">
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-6 md:max-w-2xl md:px-8 lg:max-w-3xl lg:px-12">
       <div>
         <h1 className="text-xl font-medium text-text-primary">Review &amp; confirm</h1>
         <p className="mt-1 text-sm text-text-secondary">

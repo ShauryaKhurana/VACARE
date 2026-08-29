@@ -14,6 +14,7 @@ import {
   DecisionFixtureSwitcher,
   DECISION_FIXTURE_ROUTING_IDS,
 } from "@/components/dev/FixtureSwitcher";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 export default function DecisionPage() {
   return (
@@ -52,27 +53,25 @@ function DecisionPageContent() {
   const hasDeniedOrLow = decision.conditions.some((c) => c.outcome === "denied") || decision.combinedRating < 30;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4">
-      <div className="mx-auto flex max-w-xl flex-col gap-4 pb-6">
-        <DecisionFixtureSwitcher current={fixtureOverride} />
+    <PageContainer>
+      <DecisionFixtureSwitcher current={fixtureOverride} />
 
-        <RatingHeadline combinedRating={decision.combinedRating} monthlyAmount={decision.monthlyAmount} />
+      <RatingHeadline combinedRating={decision.combinedRating} monthlyAmount={decision.monthlyAmount} />
 
-        <section>
-          <h2 className="mb-2 text-base font-medium text-text-primary">Condition by condition</h2>
-          <ul className="flex flex-col gap-2">
-            {decision.conditions.map((condition) => (
-              <ConditionRow key={condition.id} condition={condition} />
-            ))}
-          </ul>
-        </section>
+      <section>
+        <h2 className="mb-2 text-base font-medium text-text-primary">Condition by condition</h2>
+        <ul className="flex flex-col gap-2 md:grid md:grid-cols-2 md:gap-3">
+          {decision.conditions.map((condition) => (
+            <ConditionRow key={condition.id} condition={condition} />
+          ))}
+        </ul>
+      </section>
 
-        <RatingMathCard steps={decision.mathSteps} />
+      <RatingMathCard steps={decision.mathSteps} />
 
-        <UnlocksCard unlocks={decision.unlocks} />
+      <UnlocksCard unlocks={decision.unlocks} />
 
-        {hasDeniedOrLow && <OptionsCard />}
-      </div>
-    </div>
+      {hasDeniedOrLow && <OptionsCard />}
+    </PageContainer>
   );
 }

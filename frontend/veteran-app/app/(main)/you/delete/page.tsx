@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/you/DeleteConfirmDialog";
 import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 export default function DeletePage() {
   const router = useRouter();
@@ -43,35 +44,33 @@ export default function DeletePage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4">
-      <div className="mx-auto flex max-w-xl flex-col gap-4 pb-6">
-        <Link href="/you" className="flex w-fit items-center gap-1 text-sm text-text-secondary">
-          <IconArrowLeft size={16} aria-hidden="true" />
-          Back to You
-        </Link>
+    <PageContainer>
+      <Link href="/you" className="flex w-fit items-center gap-1 text-sm text-text-secondary">
+        <IconArrowLeft size={16} aria-hidden="true" />
+        Back to You
+      </Link>
 
-        <h1 className="text-xl font-medium text-text-primary">Delete my data</h1>
-        <p className="text-sm text-text-secondary">
-          This is a simple, honest control -- no maze, no retention tricks. It removes the routing
-          identifier and conversation we hold; it does not touch your claim record with VA or your
-          VSO.
-        </p>
+      <h1 className="text-xl font-medium text-text-primary">Delete my data</h1>
+      <p className="text-sm text-text-secondary">
+        This is a simple, honest control -- no maze, no retention tricks. It removes the routing
+        identifier and conversation we hold; it does not touch your claim record with VA or your
+        VSO.
+      </p>
 
-        <Button
-          variant="destructive"
-          className="w-fit rounded-control"
-          onClick={() => setDialogOpen(true)}
-        >
-          Delete my data
-        </Button>
+      <Button
+        variant="destructive"
+        className="w-fit rounded-control"
+        onClick={() => setDialogOpen(true)}
+      >
+        Delete my data
+      </Button>
 
-        <DeleteConfirmDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onConfirm={handleConfirm}
-          loading={loading}
-        />
-      </div>
-    </div>
+      <DeleteConfirmDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onConfirm={handleConfirm}
+        loading={loading}
+      />
+    </PageContainer>
   );
 }

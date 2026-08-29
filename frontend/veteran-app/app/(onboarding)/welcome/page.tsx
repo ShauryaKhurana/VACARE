@@ -34,7 +34,7 @@ export default function WelcomePage() {
   const isLastCard = step === CARDS.length;
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col justify-between px-6 py-10">
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col justify-between px-6 py-10 md:max-w-lg lg:max-w-xl">
       <div />
 
       <div className="flex flex-col items-center text-center">

@@ -2,14 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconMessageCircle2, IconClipboardList, IconUser } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-
-const TABS = [
-  { href: "/talk", label: "Talk", icon: IconMessageCircle2 },
-  { href: "/claim", label: "My claim", icon: IconClipboardList },
-  { href: "/you", label: "You", icon: IconUser },
-] as const;
+import { NAV_TABS } from "@/components/nav/navTabs";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -17,9 +11,9 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="sticky bottom-0 z-10 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
+      className="sticky bottom-0 z-10 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {TABS.map(({ href, label, icon: Icon }) => {
+      {NAV_TABS.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

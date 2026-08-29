@@ -83,9 +83,9 @@ export function ChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto flex max-w-xl flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-xl flex-col gap-3 md:max-w-2xl lg:max-w-3xl">
           <ProgressChecklist completedSteps={stepsDone} />
 
           {showResumeBanner && (
@@ -158,7 +158,7 @@ export function ChatThread() {
           <div ref={bottomRef} />
         </div>
       </div>
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl">
         <ChatInputBar onSend={(text) => void advance(text)} disabled={loading} />
       </div>
     </div>

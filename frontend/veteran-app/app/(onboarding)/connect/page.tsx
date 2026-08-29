@@ -25,28 +25,28 @@ export default function ConnectPage() {
   }, []);
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-5 px-4 py-10 text-center">
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-5 px-4 py-10 text-center md:max-w-2xl">
       <h1 className="text-xl font-medium text-text-primary">
         {matching ? "Finding your VSO…" : "You're connected"}
       </h1>
 
       {matching || !claim ? (
         <div
-          className="h-24 w-full max-w-sm animate-pulse rounded-card border border-border bg-accent-tint/40"
+          className="h-24 w-full max-w-sm animate-pulse rounded-card border border-border bg-accent-tint/40 md:max-w-md"
           role="status"
           aria-label="Matching you with a VSO"
         />
       ) : (
         <>
-          <div className="w-full max-w-sm text-left">
+          <div className="w-full max-w-sm text-left md:max-w-md">
             <VsoCard vso={claim.vso} />
           </div>
-          <p className="max-w-sm text-sm text-text-secondary">
+          <p className="max-w-sm text-sm text-text-secondary md:max-w-md">
             {claim.vso.name} typically reviews a claim like yours within a few business days and
             may reach out with questions. A real, credentialed person -- not a black box -- is now
             handling your claim.
           </p>
-          <AccentButton type="button" onClick={() => router.push("/claim")} className="w-full max-w-sm">
+          <AccentButton type="button" onClick={() => router.push("/claim")} className="w-full max-w-sm md:max-w-md">
             Go to My claim
           </AccentButton>
         </>
