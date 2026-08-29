@@ -48,10 +48,52 @@ class ClaimStore:
         self.connection.commit()
 
     def _add_missing_columns(self) -> None:
-        """Tiny forward migration so databases created by an older build still open."""
+        """Tiny forward migrations so databases created by an older build still open."""
         existing = {row["name"] for row in self.connection.execute("PRAGMA table_info(claims)")}
         if "context_json" not in existing:
             self.connection.execute("ALTER TABLE claims ADD COLUMN context_json TEXT")
+        self._relax_veteran_dob()
+
+    def _relax_veteran_dob(self) -> None:
+        """Drop the old NOT NULL on veterans.dob.
+
+        Date of birth became optional when intake moved to a conversation: a
+        draft claim can exist before the veteran has given one. SQLite cannot
+        alter a constraint in place, so the table is rebuilt when the old
+        constraint is still present.
+        """
+        columns = list(self.connection.execute("PRAGMA table_info(veterans)"))
+        if not columns:
+            return
+        dob = next((row for row in columns if row["name"] == "dob"), None)
+        if dob is None or not dob["notnull"]:
+            return
+
+        names = ", ".join(row["name"] for row in columns)
+        # legacy_alter_table keeps SQLite from rewriting other tables' foreign
+        # keys to point at the renamed table, which would leave claims
+        # referencing veterans_old after the drop.
+        self.connection.executescript(f"""
+            PRAGMA foreign_keys = OFF;
+            PRAGMA legacy_alter_table = ON;
+            ALTER TABLE veterans RENAME TO veterans_old;
+            CREATE TABLE veterans (
+                id TEXT PRIMARY KEY,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                dob TEXT,
+                email TEXT,
+                phone TEXT,
+                branch TEXT,
+                service_start TEXT,
+                service_end TEXT,
+                discharge_type TEXT NOT NULL DEFAULT 'unknown'
+            );
+            INSERT INTO veterans ({names}) SELECT {names} FROM veterans_old;
+            DROP TABLE veterans_old;
+            PRAGMA legacy_alter_table = OFF;
+            PRAGMA foreign_keys = ON;
+        """)
 
     def close(self) -> None:
         self.connection.close()

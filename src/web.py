@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
@@ -277,81 +283,165 @@ def _session_for(request: Request) -> tuple:
     return session_id, CHAT_SESSIONS[session_id]
 
 
-def _chat_page(request: Request, session_id: str, session) -> HTMLResponse:
-    question = intake_chat.next_question(session)
-    claim = session.claim
-    done = question.slot == intake_chat.Slot.DONE
-
-    response = templates.TemplateResponse(request, "chat.html", {
-        "session": session,
-        "question": question,
-        "done": done,
-        "claim": claim,
-        "have_key": gemini.available(),
-        "model": gemini.model_name(),
-        "lane_title": lanes.LANE_TITLES[lanes.determine_lane(claim.context)] if claim.conditions else None,
-        "deadlines": lanes.deadlines(claim) if claim.conditions else [],
-    })
-    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
-    return response
-
-
 @app.get("/chat", response_class=HTMLResponse)
 def chat_page(request: Request) -> HTMLResponse:
     session_id, session = _session_for(request)
     if not session.transcript:
         session.say("bot", intake_chat.next_question(session).text)
-    return _chat_page(request, session_id, session)
+    response = templates.TemplateResponse(request, "chat.html", {})
+    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
+    return response
 
 
-@app.post("/chat", response_class=HTMLResponse)
-async def chat_reply(request: Request) -> HTMLResponse:
+
+
+# ---------------------------------------------------------------------------
+# JSON API behind the single-page chat
+# ---------------------------------------------------------------------------
+
+
+def _state_payload(session) -> dict:
+    """Everything the chat page needs to render, in one object."""
+    claim = session.claim
+    question = intake_chat.next_question(session)
+    veteran = claim.veteran
+    has_facts = bool(claim.conditions or veteran.dob or veteran.service_start)
+    lane = lanes.determine_lane(claim.context) if claim.conditions else None
+
+    intake_session = ClaimIntake(claim)
+
+    return {
+        "messages": [
+            {"role": message.role, "text": message.text} for message in session.transcript
+        ],
+        "question": {
+            "slot": question.slot.value,
+            "text": question.text,
+            "help": question.help_text,
+            "accepts_upload": question.accepts_upload,
+            "options": question.options,
+            "multiline": question.slot == intake_chat.Slot.STORY,
+        },
+        "done": question.slot == intake_chat.Slot.DONE,
+        "have_key": gemini.available(),
+        "model": gemini.model_name(),
+        "claim_id": claim.id,
+        "facts": {
+            "has_any": has_facts,
+            "name": veteran.full_name if veteran.first_name != "Unknown" else None,
+            "dob": str(veteran.dob) if veteran.dob else None,
+            "branch": veteran.branch.value.replace("_", " ") if veteran.branch else None,
+            "service": (
+                f"{veteran.service_start} to {veteran.service_end or 'present'}"
+                if veteran.service_start else None
+            ),
+            "discharge": veteran.discharge_type.value.replace("_", " "),
+            "lane": lanes.LANE_TITLES[lane] if lane else None,
+            "rating": claim.context.combined_rating,
+            "conditions": [
+                {
+                    "name": condition.name,
+                    "symptoms": condition.current_symptoms,
+                    "onset": str(condition.onset_date) if condition.onset_date else None,
+                    "link": (
+                        "began in service" if condition.started_in_service
+                        else "worsened in service" if condition.worsened_in_service
+                        else "not established"
+                    ),
+                }
+                for condition in claim.conditions
+            ],
+            "documents": [
+                item.evidence_type.value.replace("_", " ") for item in claim.evidence
+            ],
+            "deadlines": [
+                {"label": deadline.label, "days": deadline.days_left,
+                 "urgency": deadline.urgency, "due": str(deadline.due)}
+                for deadline in lanes.deadlines(claim)
+            ],
+            "missing": [
+                {
+                    "label": item.label,
+                    "required": item.required,
+                    "scope": item.condition_name,
+                }
+                for item in intake_session.missing_items()
+            ] if claim.conditions else [],
+        },
+    }
+
+
+def _json_with_cookie(payload: dict, session_id: str) -> JSONResponse:
+    response = JSONResponse(payload)
+    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/api/chat")
+def api_state(request: Request) -> JSONResponse:
     session_id, session = _session_for(request)
-    form = await request.form()
-    text = str(form.get("message", "")).strip()
+    if not session.transcript:
+        session.say("bot", intake_chat.next_question(session).text)
+    return _json_with_cookie(_state_payload(session), session_id)
 
-    upload = form.get("document")
-    if upload is not None and getattr(upload, "filename", ""):
-        data = await upload.read()
-        if data:
-            try:
-                receipt = intake_chat.apply_document(
-                    session, intake_chat.Attachment(upload.filename, data)
-                )
-            except gemini.GeminiError as error:
-                receipt = f"I couldn't read that file: {error}"
-            session.say("bot", receipt)
+
+@app.post("/api/chat/message")
+async def api_message(request: Request) -> JSONResponse:
+    session_id, session = _session_for(request)
+    body = await request.json()
+    text = str(body.get("message", "")).strip()
 
     if text:
         try:
-            receipt = intake_chat.apply_answer(session, text)
+            session.say("bot", intake_chat.apply_answer(session, text))
         except gemini.GeminiError as error:
-            receipt = f"Something went wrong reading that: {error}"
-        session.say("bot", receipt)
+            session.say("bot", f"I hit a problem reading that: {error}")
 
-    question = intake_chat.next_question(session)
-    if question.slot != intake_chat.Slot.DONE:
-        session.say("bot", question.text)
+        question = intake_chat.next_question(session)
+        if question.slot != intake_chat.Slot.DONE:
+            session.say("bot", question.text)
 
-    return RedirectResponse("/chat", status_code=303)
+    return _json_with_cookie(_state_payload(session), session_id)
 
 
-@app.post("/chat/finish")
-def chat_finish(request: Request) -> RedirectResponse:
-    """Save the conversation's claim into the database and open its dashboard."""
-    _, session = _session_for(request)
+@app.post("/api/chat/upload")
+async def api_upload(request: Request) -> JSONResponse:
+    session_id, session = _session_for(request)
+    form = await request.form()
+    upload = form.get("document")
+
+    if upload is not None and getattr(upload, "filename", ""):
+        data = await upload.read()
+        if len(data) > gemini.MAX_INLINE_BYTES:
+            session.say("bot", f"{upload.filename} is too large - 18MB is the limit.")
+        else:
+            try:
+                session.say("bot", intake_chat.apply_document(
+                    session, intake_chat.Attachment(upload.filename, data)))
+            except gemini.GeminiError as error:
+                session.say("bot", f"I couldn't read {upload.filename}: {error}")
+
+        question = intake_chat.next_question(session)
+        if question.slot != intake_chat.Slot.DONE:
+            session.say("bot", question.text)
+
+    return _json_with_cookie(_state_payload(session), session_id)
+
+
+@app.post("/api/chat/finish")
+def api_finish(request: Request) -> JSONResponse:
+    session_id, session = _session_for(request)
     claim = session.claim
     ClaimIntake(claim).evaluate_readiness()
     with store() as db:
         db.save_claim(claim)
-    return RedirectResponse(f"/claim/{claim.id}", status_code=303)
+    return _json_with_cookie({"claim_id": claim.id, "url": f"/claim/{claim.id}"}, session_id)
 
 
-@app.get("/chat/reset")
-def chat_reset(request: Request) -> RedirectResponse:
-    session_id = request.cookies.get(SESSION_COOKIE)
-    CHAT_SESSIONS.pop(session_id, None)
-    response = RedirectResponse("/chat", status_code=303)
+@app.post("/api/chat/reset")
+def api_reset(request: Request) -> JSONResponse:
+    CHAT_SESSIONS.pop(request.cookies.get(SESSION_COOKIE), None)
+    response = JSONResponse({"ok": True})
     response.delete_cookie(SESSION_COOKIE)
     return response
 

@@ -124,3 +124,104 @@ def test_home_lists_a_saved_claim(client):
     with ClaimStore(web.DB_PATH) as store:
         store.save_claim(claim)
     assert claim.id in client.get("/").text
+
+
+# --- the chat UI's JSON API ------------------------------------------------
+
+STORY_PAYLOAD = {
+    "conditions": [{"name": "Tinnitus", "current_symptoms": "Ears ring constantly",
+                    "onset_date": "2011-04-01", "started_in_service": True,
+                    "worsened_in_service": False, "currently_treated": True}],
+    "event": {"title": "Convoy IED blast", "description": "Struck a roadside device.",
+              "event_date": "2011-04-09"},
+    "has_dependents": True,
+}
+
+DD214_PAYLOAD = {
+    "document_type": "dd214", "confidence": "high", "summary": "DD-214",
+    "first_name": "DANA", "last_name": "REYES", "date_of_birth": "1988-03-12",
+    "branch": "army", "service_start": "2007-06-01", "service_end": "2013-08-30",
+    "discharge_type": "honorable",
+}
+
+
+@pytest.fixture
+def mocked_ai():
+    from unittest.mock import patch
+    from src import extract, gemini
+    with patch.object(gemini, "available", return_value=True), \
+         patch.object(extract, "extract_from_story", return_value=STORY_PAYLOAD), \
+         patch.object(extract, "extract_from_document", return_value=DD214_PAYLOAD):
+        yield
+
+
+def test_chat_page_renders_the_shell(client):
+    page = client.get("/chat")
+    assert page.status_code == 200
+    assert "/api/chat" in page.text
+
+
+def test_api_returns_the_opening_question(client):
+    state = client.get("/api/chat").json()
+    assert state["question"]["slot"] == "story"
+    assert state["question"]["multiline"] is True
+    assert state["facts"]["has_any"] is False
+
+
+def test_api_message_extracts_facts_into_the_panel(client, mocked_ai):
+    client.get("/api/chat")
+    state = client.post("/api/chat/message", json={"message": "IED blast, ears ring"}).json()
+
+    assert [c["name"] for c in state["facts"]["conditions"]] == ["Tinnitus"]
+    assert state["facts"]["conditions"][0]["link"] == "began in service"
+    assert state["facts"]["lane"] == "I've never filed"
+    assert state["question"]["slot"] == "identity"
+
+
+def test_api_upload_fills_identity_and_advances(client, mocked_ai):
+    client.get("/api/chat")
+    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
+    state = client.post(
+        "/api/chat/upload", files={"document": ("dd214.txt", b"DD214", "text/plain")}
+    ).json()
+
+    assert state["facts"]["name"] == "Dana Reyes"
+    assert state["facts"]["dob"] == "1988-03-12"
+    assert state["facts"]["service"] == "2007-06-01 to 2013-08-30"
+    assert "dd214" in state["facts"]["documents"]
+    assert state["question"]["slot"] == "rating"
+
+
+def test_missing_items_are_scoped_to_a_condition(client, mocked_ai):
+    client.get("/api/chat")
+    state = client.post("/api/chat/message", json={"message": "IED blast"}).json()
+    scoped = [m for m in state["facts"]["missing"] if m["scope"]]
+    assert scoped and scoped[0]["scope"] == "Tinnitus"
+
+
+def test_finish_saves_the_claim_and_returns_its_url(client, mocked_ai):
+    client.get("/api/chat")
+    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
+    result = client.post("/api/chat/finish").json()
+
+    assert result["url"].startswith("/claim/")
+    with ClaimStore(web.DB_PATH) as store:
+        assert store.load_claim(result["claim_id"]) is not None
+    assert client.get(result["url"]).status_code == 200
+
+
+def test_reset_clears_the_conversation(client, mocked_ai):
+    client.get("/api/chat")
+    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
+    client.post("/api/chat/reset")
+    client.cookies.clear()
+    assert client.get("/api/chat").json()["facts"]["has_any"] is False
+
+
+def test_an_oversized_upload_is_refused_politely(client, mocked_ai):
+    from src import gemini
+    client.get("/api/chat")
+    big = b"x" * (gemini.MAX_INLINE_BYTES + 1)
+    state = client.post("/api/chat/upload",
+                        files={"document": ("huge.pdf", big, "application/pdf")}).json()
+    assert any("too large" in m["text"] for m in state["messages"])

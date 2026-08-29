@@ -1,102 +1,218 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Let's get your claim together</h1>
-<p class="muted">Answer in your own words. I'll ask as little as possible and read the rest off
-your documents. Nothing here is filed anywhere.</p>
+<style>
+  .chatwrap { display:grid; grid-template-columns: 1fr 300px; gap:22px; align-items:start; }
+  @media (max-width:800px){ .chatwrap { grid-template-columns:1fr; } }
+  .stream { border:1.6px solid var(--rule); border-radius:10px; padding:16px;
+            height:460px; overflow-y:auto; background:#fff; }
+  .bubble { max-width:88%; padding:10px 13px; border-radius:12px; margin:10px 0;
+            font-size:14.5px; line-height:1.45; white-space:pre-wrap; }
+  .bot  { background:var(--wash); border:1px solid var(--rule); border-bottom-left-radius:3px; }
+  .vet  { background:var(--you); color:#fff; margin-left:auto; border-bottom-right-radius:3px; }
+  .vet.file { background:#fff; color:var(--you); border:1.5px dashed var(--you); font-family:"Courier Prime",monospace; font-size:13px; }
+  .typing { color:var(--muted); font-size:13px; font-style:italic; margin:8px 0; }
+  .composer { margin-top:14px; }
+  .composer textarea { resize:vertical; }
+  .quick { margin:8px 0 4px; }
+  .quick button { margin:0 6px 6px 0; font-weight:400; font-size:13.5px; padding:6px 12px; }
+  .drop { border:2px dashed var(--rule); border-radius:8px; padding:14px; text-align:center;
+          color:var(--muted); font-size:13.5px; margin-top:10px; cursor:pointer; }
+  .drop.over { border-color:var(--you); background:#f2f6ff; color:var(--you); }
+  .panel { border:1.6px solid var(--ink); border-radius:10px; padding:14px 16px; font-size:13.5px; }
+  .panel h4 { font-family:"Archivo",sans-serif; font-size:13px; text-transform:uppercase;
+              letter-spacing:.08em; color:var(--muted); margin:14px 0 6px; }
+  .panel h4:first-child { margin-top:0; }
+  .chip { display:inline-block; background:var(--wash); border:1px solid var(--rule);
+          border-radius:20px; padding:2px 10px; margin:2px 3px 2px 0; font-size:12.5px; }
+  .cond { padding:7px 0; border-bottom:1px solid var(--rule); }
+  .cond:last-child { border-bottom:none; }
+  .empty { color:var(--muted); font-style:italic; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
+  .req { background:var(--lock); } .sug { background:var(--emp); }
+</style>
 
-{% if not have_key %}
-<div class="banner" style="border-left-color:#b3261e">
-  No <span class="form-no">GEMINI_API_KEY</span> found, so I can't read documents or parse your
-  story yet. Add one to <span class="form-no">.env</span> and reload.
+<h1>Talk to VACARE</h1>
+<p class="muted">Answer in your own words. I ask as little as possible and read the rest off your
+documents. Nothing is filed anywhere.</p>
+
+<div id="nokey" class="banner" style="border-left-color:#b3261e; display:none">
+  No <span class="form-no">GEMINI_API_KEY</span> in <span class="form-no">.env</span>, so I can't
+  read documents or parse your story.
 </div>
-{% endif %}
 
-<div class="card" style="border-width:2px">
-  {% for msg in session.transcript %}
-    {% if msg.role == 'bot' %}
-      <div style="margin:12px 0"><span class="badge b-va">vacare</span>
-        <span style="margin-left:6px">{{ msg.text }}</span></div>
-    {% else %}
-      <div style="margin:12px 0 12px 28px; padding-left:12px; border-left:3px solid var(--you)">
-        <span class="muted" style="font-size:13px">you</span><br>{{ msg.text }}
+<div class="chatwrap">
+  <div>
+    <div class="stream" id="stream"></div>
+
+    <div class="composer">
+      <div class="quick" id="quick"></div>
+      <div id="prompt" class="muted" style="font-size:13px; margin-bottom:5px"></div>
+      <textarea id="input" rows="2" placeholder="Type your answer, then press Enter..."></textarea>
+      <div class="drop" id="drop">
+        Drop a file here, or <u>click to choose</u> - DD-214, medical records, decision letter
       </div>
-    {% endif %}
-  {% endfor %}
-</div>
-
-{% if not done %}
-<form method="post" action="/chat" enctype="multipart/form-data">
-  <label>{{ question.text }}</label>
-  {% if question.help_text %}<p class="muted" style="font-size:13.5px; margin:2px 0 8px">{{ question.help_text }}</p>{% endif %}
-
-  {% if question.options %}
-  <div style="margin-bottom:8px">
-    {% for option in question.options %}
-      <button type="submit" name="message" value="{{ option }}" class="btn ghost"
-              style="margin:3px 4px 3px 0; font-weight:400">{{ option }}</button>
-    {% endfor %}
+      <input type="file" id="file" style="display:none"
+             accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt">
+      <p style="margin-top:12px">
+        <button id="send">Send</button>
+        <button id="finish" class="btn" style="display:none">Build my claim packet</button>
+        <button id="reset" class="btn ghost" type="button">Start over</button>
+      </p>
+    </div>
   </div>
-  {% endif %}
 
-  <textarea name="message" rows="{{ 4 if question.slot.value == 'story' else 2 }}"
-            placeholder="Type your answer..."></textarea>
-
-  {% if question.accepts_upload %}
-  <label style="margin-top:12px">Or upload a document (PDF or photo)</label>
-  <input type="file" name="document" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt">
-  <p class="muted" style="font-size:13px">DD-214, medical records, decision letter - I'll work out
-     which is which and pull the details out.</p>
-  {% endif %}
-
-  <p style="margin-top:14px">
-    <button type="submit">Send</button>
-    <a href="/chat/reset" class="btn ghost">Start over</a>
-  </p>
-</form>
-{% else %}
-<div class="banner" style="border-left-color:#1e6f45"><b>That's everything I need.</b></div>
-<form method="post" action="/chat/finish">
-  <button type="submit">Build my claim packet</button>
-  <a href="/chat/reset" class="btn ghost">Start over</a>
-</form>
-{% endif %}
-
-{% if claim.conditions %}
-<h2>What I have so far</h2>
-<div class="wash">
-  <b>{{ claim.veteran.full_name }}</b>
-  {% if claim.veteran.dob %} &middot; born {{ claim.veteran.dob }}{% endif %}
-  {% if claim.veteran.branch %} &middot; {{ claim.veteran.branch.value.replace('_',' ') }}{% endif %}
-  {% if claim.veteran.service_start %} &middot; {{ claim.veteran.service_start }} to
-    {{ claim.veteran.service_end or 'present' }}{% endif %}
-  {% if lane_title %}<br><span class="muted">Lane:</span> {{ lane_title }}{% endif %}
+  <div class="panel" id="panel">
+    <h4>What I have</h4>
+    <div class="empty" id="factsEmpty">Nothing yet.</div>
+    <div id="facts"></div>
+  </div>
 </div>
 
-<table style="margin-top:12px">
-  <tr><th>Condition</th><th>Since</th><th>Service link</th></tr>
-  {% for c in claim.conditions %}
-  <tr>
-    <td><b>{{ c.name }}</b><div class="muted" style="font-size:13px">{{ c.current_symptoms }}</div></td>
-    <td>{{ c.onset_date or "-" }}</td>
-    <td class="muted">
-      {% if c.started_in_service %}began in service{% elif c.worsened_in_service %}worsened in service{% else %}not established{% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-</table>
+<script>
+const $ = (id) => document.getElementById(id);
+let busy = false;
 
-{% if claim.evidence %}
-<p style="margin-top:10px"><span class="muted">Documents read:</span>
-  {% for e in claim.evidence %}<span class="badge b-veteran" style="margin-right:4px">{{ e.evidence_type.value.replace('_',' ') }}</span>{% endfor %}
-</p>
-{% endif %}
+function bubble(role, text) {
+  const div = document.createElement('div');
+  const isFile = text.startsWith('[uploaded ');
+  div.className = 'bubble ' + (role === 'bot' ? 'bot' : 'vet' + (isFile ? ' file' : ''));
+  div.textContent = text;
+  return div;
+}
 
-{% if deadlines %}
-<h3>Clocks already running</h3>
-{% for d in deadlines %}
-<div class="dl {{ d.urgency }}"><div><b>{{ d.label }}</b></div>
-  <div class="days">{% if d.expired %}EXPIRED{% else %}{{ d.days_left }} days{% endif %}</div></div>
-{% endfor %}
-{% endif %}
-{% endif %}
+function render(state) {
+  const stream = $('stream');
+  stream.innerHTML = '';
+  state.messages.forEach(m => stream.appendChild(bubble(m.role, m.text)));
+  stream.scrollTop = stream.scrollHeight;
+
+  $('nokey').style.display = state.have_key ? 'none' : 'block';
+
+  const q = state.question;
+  $('prompt').textContent = q.help || '';
+  $('input').rows = q.multiline ? 5 : 2;
+  $('input').style.display = state.done ? 'none' : 'block';
+  $('drop').style.display = (q.accepts_upload && !state.done) ? 'block' : 'none';
+  $('send').style.display = state.done ? 'none' : 'inline-block';
+  $('finish').style.display = state.done ? 'inline-block' : 'none';
+
+  const quick = $('quick');
+  quick.innerHTML = '';
+  if (!state.done) {
+    (q.options || []).forEach(opt => {
+      const b = document.createElement('button');
+      b.className = 'btn ghost'; b.textContent = opt; b.type = 'button';
+      b.onclick = () => send(opt);
+      quick.appendChild(b);
+    });
+  }
+
+  renderFacts(state.facts);
+}
+
+function renderFacts(f) {
+  $('factsEmpty').style.display = f.has_any ? 'none' : 'block';
+  const el = $('facts');
+  el.innerHTML = '';
+  if (!f.has_any) return;
+
+  const add = (html) => { const d = document.createElement('div'); d.innerHTML = html; el.appendChild(d); };
+
+  if (f.name || f.dob || f.service) {
+    add('<h4>Veteran</h4>');
+    if (f.name)    add('<b>' + f.name + '</b>');
+    if (f.dob)     add('born ' + f.dob);
+    if (f.branch)  add(f.branch + (f.discharge && f.discharge !== 'unknown' ? ' &middot; ' + f.discharge : ''));
+    if (f.service) add('<span class="muted">' + f.service + '</span>');
+  }
+  if (f.rating !== null && f.rating !== undefined) add('<div>Rated ' + f.rating + '%</div>');
+  if (f.lane) { add('<h4>Lane</h4>'); add(f.lane); }
+
+  if (f.conditions.length) {
+    add('<h4>Conditions</h4>');
+    f.conditions.forEach(c => add(
+      '<div class="cond"><b>' + c.name + '</b><br>' +
+      '<span class="muted">' + (c.onset ? c.onset + ' &middot; ' : '') + c.link + '</span></div>'));
+  }
+  if (f.documents.length) {
+    add('<h4>Documents read</h4>');
+    add(f.documents.map(d => '<span class="chip">' + d + '</span>').join(''));
+  }
+  if (f.deadlines.length) {
+    add('<h4>Clocks</h4>');
+    f.deadlines.forEach(d => add('<div class="' + d.urgency + '">' + d.label +
+      ' <span class="days">' + (d.days < 0 ? 'EXPIRED' : d.days + 'd') + '</span></div>'));
+  }
+  if (f.missing.length) {
+    add('<h4>Still needed</h4>');
+    f.missing.slice(0, 6).forEach(m => add(
+      '<div><span class="dot ' + (m.required ? 'req' : 'sug') + '"></span>' + m.label +
+      (m.scope ? ' <span class="muted">(' + m.scope + ')</span>' : '') + '</div>'));
+  }
+}
+
+function thinking(on) {
+  busy = on;
+  $('send').disabled = on;
+  const existing = document.querySelector('.typing');
+  if (existing) existing.remove();
+  if (on) {
+    const t = document.createElement('div');
+    t.className = 'typing'; t.textContent = 'reading...';
+    $('stream').appendChild(t);
+    $('stream').scrollTop = $('stream').scrollHeight;
+  }
+}
+
+async function send(text) {
+  if (busy) return;
+  const value = (text !== undefined ? text : $('input').value).trim();
+  if (!value) return;
+  $('stream').appendChild(bubble('veteran', value));
+  $('input').value = '';
+  thinking(true);
+  const res = await fetch('/api/chat/message', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({message: value})
+  });
+  thinking(false);
+  render(await res.json());
+}
+
+async function upload(file) {
+  if (busy || !file) return;
+  $('stream').appendChild(bubble('veteran', '[uploaded ' + file.name + ']'));
+  thinking(true);
+  const body = new FormData();
+  body.append('document', file);
+  const res = await fetch('/api/chat/upload', {method: 'POST', body});
+  thinking(false);
+  render(await res.json());
+}
+
+$('send').onclick = () => send();
+$('input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+$('drop').onclick = () => $('file').click();
+$('file').onchange = (e) => upload(e.target.files[0]);
+['dragenter','dragover'].forEach(ev => $('drop').addEventListener(ev, (e) => {
+  e.preventDefault(); $('drop').classList.add('over');
+}));
+['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, (e) => {
+  e.preventDefault(); $('drop').classList.remove('over');
+}));
+$('drop').addEventListener('drop', (e) => upload(e.dataTransfer.files[0]));
+
+$('finish').onclick = async () => {
+  const res = await fetch('/api/chat/finish', {method: 'POST'});
+  window.location = (await res.json()).url;
+};
+$('reset').onclick = async () => {
+  await fetch('/api/chat/reset', {method: 'POST'});
+  window.location.reload();
+};
+
+fetch('/api/chat').then(r => r.json()).then(render);
+</script>
 {% endblock %}
