@@ -11,8 +11,16 @@ import { persist } from "zustand/middleware";
 interface SessionState {
   routingId: string | null;
   onboardingComplete: boolean;
+  /**
+   * True once the veteran has sent their first real message in Talk. Drives
+   * whether the persistent nav chrome (SideNav/BottomNav) is shown -- per
+   * the Frontend HLD Section 3, the three-tab nav is a surface that appears
+   * "after first run," not before the veteran has actually started talking.
+   */
+  conversationStarted: boolean;
   startSession: () => void;
   completeOnboarding: () => void;
+  markConversationStarted: () => void;
   clearSession: () => void;
 }
 
@@ -28,12 +36,15 @@ export const useSessionStore = create<SessionState>()(
     (set) => ({
       routingId: null,
       onboardingComplete: false,
+      conversationStarted: false,
       startSession: () =>
         set((state) => ({
           routingId: state.routingId ?? generateRoutingId(),
         })),
       completeOnboarding: () => set({ onboardingComplete: true }),
-      clearSession: () => set({ routingId: null, onboardingComplete: false }),
+      markConversationStarted: () => set({ conversationStarted: true }),
+      clearSession: () =>
+        set({ routingId: null, onboardingComplete: false, conversationStarted: false }),
     }),
     { name: "veteran-app-session" },
   ),

@@ -29,6 +29,7 @@ const STARTER_PROMPTS = [
 export function ChatThread() {
   const routingId = useSessionStore((s) => s.routingId);
   const startSession = useSessionStore((s) => s.startSession);
+  const markConversationStarted = useSessionStore((s) => s.markConversationStarted);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,6 +57,7 @@ export function ChatThread() {
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setMessages(parsed);
           setShowResumeBanner(true);
+          if (parsed.length > 1) markConversationStarted();
           return;
         }
       } catch {
@@ -80,6 +82,7 @@ export function ChatThread() {
   async function advance(veteranText?: string) {
     if (!routingId) return;
     if (veteranText) {
+      markConversationStarted();
       setMessages((prev) => [
         ...prev,
         { id: `veteran-${Date.now()}`, type: "veteran-text", text: veteranText },
