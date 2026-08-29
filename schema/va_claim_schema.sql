@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS veterans (
     id TEXT PRIMARY KEY,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
+    middle_name TEXT,
     dob TEXT,               -- nullable: a draft claim may not know it yet
     email TEXT,
     phone TEXT,

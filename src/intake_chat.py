@@ -18,6 +18,7 @@ key; only the story and document steps need Gemini.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -80,6 +81,7 @@ class Session:
 
     claim: Claim
     transcript: List[Message] = field(default_factory=list)
+    seen_documents: set = field(default_factory=set)
     story_done: bool = False
     identity_done: bool = False
     rating_done: bool = False
@@ -179,11 +181,18 @@ def next_question(session: Session) -> Question:
         )
 
     if not session.records_done:
+        uploaded = len(claim.evidence)
         return Question(
             slot=Slot.RECORDS,
-            text="Last step: upload any medical records, and I'll pull the diagnoses out.",
-            help_text="Upload as many as you like, then type 'done'.",
+            text=(
+                "Last step: upload any medical records and I'll pull the diagnoses out."
+                if not uploaded else
+                f"Anything else to add? I've read {uploaded} document"
+                f"{'s' if uploaded != 1 else ''} so far."
+            ),
+            help_text="Upload as many as you like. Choose 'That's everything' when you're done.",
             accepts_upload=True,
+            options=["That's everything"],
         )
 
     return Question(slot=Slot.DONE, text="That's everything I need.")
@@ -297,7 +306,7 @@ def apply_answer(session: Session, text: str) -> str:
 
     if question.slot == Slot.RECORDS:
         session.records_done = True
-        return "Done. Here's what I have."
+        return "Got it - that's everything I need."
 
     return "Thanks."
 
@@ -361,6 +370,11 @@ def apply_document(session: Session, attachment: Attachment) -> str:
     if not gemini.available():
         return "No AI key configured, so I can't read documents yet."
 
+    digest = hashlib.sha256(attachment.data).hexdigest()
+    if digest in session.seen_documents:
+        return "I've already read that exact file - nothing new from it."
+    session.seen_documents.add(digest)
+
     payload = extract.extract_from_document(attachment)
     doc_type = payload.get("document_type", "other")
     intake = ClaimIntake(claim)
@@ -399,6 +413,10 @@ def apply_document(session: Session, attachment: Attachment) -> str:
         added.append(condition_fields["name"])
     if added:
         notes.append("Also found: " + ", ".join(added) + ".")
+    elif new_conditions:
+        notes.append("Those conditions were already on your claim, so nothing new to add.")
+    elif not fields and doc_type != "decision_letter":
+        notes.append("Nothing new in it, but I've filed it as supporting evidence.")
 
     return " ".join(notes)
 
@@ -411,6 +429,7 @@ def _merge_veteran(claim: Claim, fields: Dict[str, Any]) -> List[str]:
     if fields.get("first_name") and veteran.first_name == "Unknown":
         veteran.first_name = fields["first_name"]
         veteran.last_name = fields.get("last_name", veteran.last_name)
+        veteran.middle_name = fields.get("middle_name")
         applied.append("name")
     if fields.get("dob") and veteran.dob is None:
         veteran.dob = fields["dob"]

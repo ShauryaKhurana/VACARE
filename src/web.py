@@ -371,6 +371,19 @@ def _state_payload(session) -> dict:
     }
 
 
+def _ask_next(session) -> None:
+    """Append the next question, unless the bot just asked exactly that."""
+    question = intake_chat.next_question(session)
+    if question.slot == intake_chat.Slot.DONE:
+        return
+    for message in reversed(session.transcript):
+        if message.role == "bot":
+            if message.text == question.text:
+                return
+            break
+    session.say("bot", question.text)
+
+
 def _json_with_cookie(payload: dict, session_id: str) -> JSONResponse:
     response = JSONResponse(payload)
     response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
@@ -397,9 +410,7 @@ async def api_message(request: Request) -> JSONResponse:
         except gemini.GeminiError as error:
             session.say("bot", f"I hit a problem reading that: {error}")
 
-        question = intake_chat.next_question(session)
-        if question.slot != intake_chat.Slot.DONE:
-            session.say("bot", question.text)
+        _ask_next(session)
 
     return _json_with_cookie(_state_payload(session), session_id)
 
@@ -421,9 +432,7 @@ async def api_upload(request: Request) -> JSONResponse:
             except gemini.GeminiError as error:
                 session.say("bot", f"I couldn't read {upload.filename}: {error}")
 
-        question = intake_chat.next_question(session)
-        if question.slot != intake_chat.Slot.DONE:
-            session.say("bot", question.text)
+        _ask_next(session)
 
     return _json_with_cookie(_state_payload(session), session_id)
 

@@ -172,8 +172,11 @@ def extract_from_document(attachment: Attachment) -> Dict[str, Any]:
         "(date of birth), block 12a (date entered active duty), block 12b (separation "
         "date), block 24 (character of service). VA prints dates as 'YYYY MM DD' - "
         "convert them to YYYY-MM-DD.\n"
-        "If it is a medical record, list the diagnosed conditions, when they began, whether "
-        "treatment is ongoing, and the treating providers.\n"
+        "If it is a medical record, list the diagnosed conditions, whether treatment is "
+        "ongoing, and the treating providers. For onset_date, use any phrase that dates the "
+        "condition - 'since 2011', 'present since the 2012 deployment', 'onset following' - "
+        "and give the first of that year or month when only a year or month is stated. "
+        "Leave onset_date empty only when the record truly says nothing about when it began.\n"
         "If it is a VA decision letter, read the date of the decision.\n\n"
         "Leave any field empty if the document does not clearly show it."
     )
@@ -226,6 +229,14 @@ def veteran_fields_from(payload: Dict[str, Any]) -> Dict[str, Any]:
         value = _clean(payload.get(key))
         if value:
             fields[key] = normalize_name(value)
+
+    # DD-214 block 1 is "LAST, FIRST MIDDLE", so a middle name often arrives
+    # glued to the first name. The 526EZ has its own middle-initial box.
+    first = fields.get("first_name")
+    if first and " " in first:
+        head, _, tail = first.partition(" ")
+        fields["first_name"] = head
+        fields["middle_name"] = tail.strip()
 
     dob = parse_date(payload.get("date_of_birth"))
     if dob:

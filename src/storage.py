@@ -52,6 +52,10 @@ class ClaimStore:
         existing = {row["name"] for row in self.connection.execute("PRAGMA table_info(claims)")}
         if "context_json" not in existing:
             self.connection.execute("ALTER TABLE claims ADD COLUMN context_json TEXT")
+        veteran_columns = {row["name"] for row in
+                           self.connection.execute("PRAGMA table_info(veterans)")}
+        if veteran_columns and "middle_name" not in veteran_columns:
+            self.connection.execute("ALTER TABLE veterans ADD COLUMN middle_name TEXT")
         self._relax_veteran_dob()
 
     def _relax_veteran_dob(self) -> None:
@@ -81,6 +85,7 @@ class ClaimStore:
                 id TEXT PRIMARY KEY,
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
+                middle_name TEXT,
                 dob TEXT,
                 email TEXT,
                 phone TEXT,
@@ -113,17 +118,19 @@ class ClaimStore:
 
         cur.execute(
             """
-            INSERT INTO veterans (id, first_name, last_name, dob, email, phone,
+            INSERT INTO veterans (id, first_name, last_name, middle_name, dob, email, phone,
                                   branch, service_start, service_end, discharge_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 first_name=excluded.first_name, last_name=excluded.last_name,
+                middle_name=excluded.middle_name,
                 dob=excluded.dob, email=excluded.email, phone=excluded.phone,
                 branch=excluded.branch, service_start=excluded.service_start,
                 service_end=excluded.service_end, discharge_type=excluded.discharge_type
             """,
             (
-                veteran.id, veteran.first_name, veteran.last_name, _iso(veteran.dob),
+                veteran.id, veteran.first_name, veteran.last_name, veteran.middle_name,
+                _iso(veteran.dob),
                 veteran.email, veteran.phone,
                 veteran.branch.value if veteran.branch else None,
                 _iso(veteran.service_start), _iso(veteran.service_end),
