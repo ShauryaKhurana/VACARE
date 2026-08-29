@@ -20,6 +20,7 @@ from src.models import (
     ServiceEvent,
     StatusEvent,
     Task,
+    VaSubmission,
     Veteran,
     VSOReview,
 )
@@ -30,6 +31,17 @@ SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "va_claim_sche
 
 def _iso(value: Optional[date]) -> Optional[str]:
     return value.isoformat() if value else None
+
+
+def _store_dob(value: Optional[date]) -> str:
+    """SQLite requires a value; use a sentinel when intake has not collected DOB yet."""
+    return value.isoformat() if value else "0000-01-01"
+
+
+def _load_dob(value: Optional[str]) -> Optional[date]:
+    if not value or value == "0000-01-01":
+        return None
+    return date.fromisoformat(value)
 
 
 class ClaimStore:
@@ -52,6 +64,29 @@ class ClaimStore:
         existing = {row["name"] for row in self.connection.execute("PRAGMA table_info(claims)")}
         if "context_json" not in existing:
             self.connection.execute("ALTER TABLE claims ADD COLUMN context_json TEXT")
+        tables = {
+            row["name"]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "va_submissions" not in tables:
+            self.connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS va_submissions (
+                    id TEXT PRIMARY KEY,
+                    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                    submission_id TEXT NOT NULL,
+                    doc_type TEXT NOT NULL DEFAULT '21-526EZ',
+                    status TEXT NOT NULL,
+                    message TEXT,
+                    submitted_on TEXT NOT NULL,
+                    updated_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_va_submissions_claim_id
+                    ON va_submissions(claim_id);
+                """
+            )
 
     def close(self) -> None:
         self.connection.close()
@@ -81,7 +116,7 @@ class ClaimStore:
                 service_end=excluded.service_end, discharge_type=excluded.discharge_type
             """,
             (
-                veteran.id, veteran.first_name, veteran.last_name, _iso(veteran.dob),
+                veteran.id, veteran.first_name, veteran.last_name, _store_dob(veteran.dob),
                 veteran.email, veteran.phone,
                 veteran.branch.value if veteran.branch else None,
                 _iso(veteran.service_start), _iso(veteran.service_end),
@@ -105,7 +140,7 @@ class ClaimStore:
 
         # Child rows are replaced wholesale so the database always mirrors the
         # in-memory claim. Order matters because of the foreign keys.
-        for table in ("vso_reviews", "status_events", "tasks", "evidence_items",
+        for table in ("va_submissions", "vso_reviews", "status_events", "tasks", "evidence_items",
                       "conditions", "service_events"):
             cur.execute(f"DELETE FROM {table} WHERE claim_id = ?", (claim.id,))
 
@@ -181,6 +216,22 @@ class ClaimStore:
             ],
         )
 
+        cur.executemany(
+            """
+            INSERT INTO va_submissions (id, claim_id, submission_id, doc_type, status,
+                                        message, submitted_on, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    submission.id, claim.id, submission.submission_id, submission.doc_type,
+                    submission.status, submission.message, _iso(submission.submitted_on),
+                    submission.updated_at,
+                )
+                for submission in claim.va_submissions
+            ],
+        )
+
         self.connection.commit()
         return claim.id
 
@@ -216,9 +267,15 @@ class ClaimStore:
                 f"SELECT * FROM {table} WHERE claim_id = ?", (claim_id,)
             ).fetchall()
 
+        veteran_data = {k: veteran_row[k] for k in veteran_row.keys()}
+        veteran_data["dob"] = _load_dob(veteran_data.get("dob"))
+        for date_field in ("service_start", "service_end"):
+            if veteran_data.get(date_field):
+                veteran_data[date_field] = date.fromisoformat(veteran_data[date_field])
+
         return Claim(
             id=claim_row["id"],
-            veteran=Veteran(**{k: veteran_row[k] for k in veteran_row.keys()}),
+            veteran=Veteran(**veteran_data),
             claim_type=claim_row["claim_type"],
             status=claim_row["status"],
             summary=claim_row["summary"],
@@ -233,6 +290,7 @@ class ClaimStore:
             tasks=[Task(**dict(r)) for r in _drop_claim_id(child("tasks"))],
             status_history=[StatusEvent(**dict(r)) for r in _drop_claim_id(child("status_events"))],
             reviews=[VSOReview(**dict(r)) for r in _drop_claim_id(child("vso_reviews"))],
+            va_submissions=_load_va_submissions(child("va_submissions")),
         )
 
     def latest_claim(self) -> Optional[Claim]:
@@ -244,3 +302,13 @@ class ClaimStore:
 def _drop_claim_id(rows: List[sqlite3.Row]) -> List[dict]:
     """Rows carry a claim_id column that the models do not have."""
     return [{k: row[k] for k in row.keys() if k != "claim_id"} for row in rows]
+
+
+def _load_va_submissions(rows: List[sqlite3.Row]) -> List[VaSubmission]:
+    submissions: List[VaSubmission] = []
+    for row in rows:
+        data = {k: row[k] for k in row.keys() if k != "claim_id"}
+        if data.get("submitted_on"):
+            data["submitted_on"] = date.fromisoformat(data["submitted_on"])
+        submissions.append(VaSubmission(**data))
+    return submissions

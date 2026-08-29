@@ -22,6 +22,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from src import evidence_rules, gemini, intake_chat, lanes, packet as packet_view
+from src.api.routes import router as api_router
 from src.claim_intake import ClaimIntake
 from src.models import (
     Branch,
@@ -36,6 +37,7 @@ from src.formfill import fill_526ez
 from src.storage import DEFAULT_DB_PATH, ClaimStore
 
 app = FastAPI(title="VACARE")
+app.include_router(api_router, prefix="/api")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 DB_PATH = Path(DEFAULT_DB_PATH)

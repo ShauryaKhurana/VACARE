@@ -100,3 +100,16 @@ CREATE INDEX IF NOT EXISTS idx_evidence_claim_id ON evidence_items(claim_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_claim_id ON tasks(claim_id);
 CREATE INDEX IF NOT EXISTS idx_status_events_claim_id ON status_events(claim_id);
 CREATE INDEX IF NOT EXISTS idx_vso_reviews_claim_id ON vso_reviews(claim_id);
+
+CREATE TABLE IF NOT EXISTS va_submissions (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    submission_id TEXT NOT NULL,
+    doc_type TEXT NOT NULL DEFAULT '21-526EZ',
+    status TEXT NOT NULL,
+    message TEXT,
+    submitted_on TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_va_submissions_claim_id ON va_submissions(claim_id);

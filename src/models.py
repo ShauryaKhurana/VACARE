@@ -282,6 +282,18 @@ class VSOReview(BaseModel):
     reviewed_on: date = Field(default_factory=date.today)
 
 
+class VaSubmission(BaseModel):
+    """A document package sent to VA Benefits Intake."""
+
+    id: str = Field(default_factory=new_id)
+    submission_id: str
+    doc_type: str = "21-526EZ"
+    status: str
+    message: Optional[str] = None
+    submitted_on: date = Field(default_factory=date.today)
+    updated_at: Optional[str] = None
+
+
 class LaneContext(BaseModel):
     """The answers that decide which lane a veteran is in.
 
@@ -345,6 +357,7 @@ class Claim(BaseModel):
     tasks: List[Task] = Field(default_factory=list)
     status_history: List[StatusEvent] = Field(default_factory=list)
     reviews: List[VSOReview] = Field(default_factory=list)
+    va_submissions: List[VaSubmission] = Field(default_factory=list)
     created_on: date = Field(default_factory=date.today)
 
     # -- small helpers used by the intake flow --------------------------------

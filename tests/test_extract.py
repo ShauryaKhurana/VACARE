@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from src import extract, gemini, intake_chat
-from src.gemini import Attachment
+from src.gemini import Attachment, GeminiError
 
 STORY_PAYLOAD = {
     "conditions": [
@@ -134,7 +134,7 @@ def test_dd214_upload_fills_identity_so_it_is_never_asked(session):
     assert veteran.dob == date(1988, 3, 12)
     assert veteran.service_end == date(2013, 8, 30)
     assert veteran.discharge_type.value == "honorable"
-    assert "don't need to type" in receipt
+    assert "Filled in" in receipt
     # And the identity questions are now skipped entirely.
     assert intake_chat.next_question(session).slot == intake_chat.Slot.RATING
 
@@ -211,9 +211,14 @@ live = pytest.mark.skipif(not gemini.available(), reason="no GEMINI_API_KEY conf
 
 @live
 def test_live_story_extraction_finds_two_conditions():
-    payload = extract.extract_from_story(
-        "IED blast in Kandahar 2011. Ears ring constantly and my lower back hurts when I stand."
-    )
+    try:
+        payload = extract.extract_from_story(
+            "IED blast in Kandahar 2011. Ears ring constantly and my lower back hurts when I stand."
+        )
+    except GeminiError as error:
+        if "HTTP 503" in str(error) or "HTTP 429" in str(error):
+            pytest.skip(f"Gemini temporarily unavailable: {error}")
+        raise
     names = " ".join(c["name"].lower() for c in extract.conditions_from(payload))
     assert "tinnitus" in names or "ring" in names
     assert "back" in names
@@ -225,7 +230,12 @@ def test_live_document_extraction_identifies_a_dd214():
             b"1. NAME: REYES, DANA\n2. BRANCH: ARMY\n5. DATE OF BIRTH: 1988 03 12\n"
             b"12a. DATE ENTERED AD: 2007 06 01\n12b. SEPARATION DATE: 2013 08 30\n"
             b"24. CHARACTER OF SERVICE: HONORABLE\n")
-    payload = extract.extract_from_document(Attachment("dd214.txt", text))
+    try:
+        payload = extract.extract_from_document(Attachment("dd214.txt", text))
+    except GeminiError as error:
+        if "HTTP 503" in str(error) or "HTTP 429" in str(error):
+            pytest.skip(f"Gemini temporarily unavailable: {error}")
+        raise
     assert payload["document_type"] == "dd214"
     fields = extract.veteran_fields_from(payload)
     assert fields["dob"] == date(1988, 3, 12)

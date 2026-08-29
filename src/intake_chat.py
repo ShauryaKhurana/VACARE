@@ -355,52 +355,15 @@ def _apply_story(session: Session, story: str) -> str:
 
 def apply_document(session: Session, attachment: Attachment) -> str:
     """Handle an uploaded file for whatever slot we're on."""
-    claim = session.claim
     session.say("veteran", f"[uploaded {attachment.filename}]")
+    from src.document_ingest import ingest_document
 
-    if not gemini.available():
-        return "No AI key configured, so I can't read documents yet."
-
-    payload = extract.extract_from_document(attachment)
-    doc_type = payload.get("document_type", "other")
-    intake = ClaimIntake(claim)
-
-    evidence_type = DOC_TO_EVIDENCE.get(doc_type, EvidenceType.OTHER)
-    intake.add_evidence(
-        evidence_type=evidence_type,
-        title=payload.get("summary") or attachment.filename,
-        source=attachment.filename,
-    )
-
-    notes: List[str] = [f"Read it as: {payload.get('summary') or doc_type}."]
-
-    fields = extract.veteran_fields_from(payload)
-    if fields:
-        applied = _merge_veteran(claim, fields)
-        if applied:
-            notes.append("Filled in " + ", ".join(applied) + " - you don't need to type those.")
+    result = ingest_document(session.claim, attachment.filename, attachment.data)
+    if result.document_type == "dd214":
         session.identity_done = True
-
-    if doc_type == "decision_letter":
-        decision = extract.parse_date(payload.get("decision_date"))
-        if decision:
-            claim.context.decision_date = decision
-            claim.context.disagrees_with_decision = True
-            session.decision_done = True
-            notes.append(f"Decision dated {decision}.")
-
-    new_conditions = extract.conditions_from(payload)
-    existing = {condition.name.lower() for condition in claim.conditions}
-    added = []
-    for condition_fields in new_conditions:
-        if condition_fields["name"].lower() in existing:
-            continue
-        intake.add_condition(**condition_fields)
-        added.append(condition_fields["name"])
-    if added:
-        notes.append("Also found: " + ", ".join(added) + ".")
-
-    return " ".join(notes)
+    if session.claim.context.decision_date:
+        session.decision_done = True
+    return result.message
 
 
 def _merge_veteran(claim: Claim, fields: Dict[str, Any]) -> List[str]:
