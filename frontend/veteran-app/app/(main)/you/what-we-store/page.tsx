@@ -1,17 +1,30 @@
 import Link from "next/link";
-import { IconArrowLeft, IconCheck, IconX } from "@tabler/icons-react";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { StatusTag } from "@/components/shared/StatusTag";
 
-const WE_KEEP = [
-  "A routing identifier that connects your conversation to your VSO -- not your name, SSN, or file number",
-  "Notification and accessibility preferences",
-  "The conversation itself, so you can pick up where you left off",
-];
-
-const WE_DONT_KEEP = [
-  "A permanent copy of your medical or service records -- those go to your VSO and VA, the systems already authorized to hold them",
-  "Photo location, device ID, or timestamp data from documents you capture -- that metadata is stripped before anything is stored",
-  "Payment information -- we never ask for it",
+const CATEGORIES = [
+  {
+    title: "Your routing ID",
+    tag: "Stored" as const,
+    variant: "success" as const,
+    detail:
+      "A routing identifier that connects your conversation to your VSO -- not your name, SSN, or file number.",
+  },
+  {
+    title: "Your service and medical records",
+    tag: "Not stored" as const,
+    variant: "pending" as const,
+    detail:
+      "Those go to your VSO and VA -- the systems already authorized to hold them. We don't keep a copy, and photo metadata (location, device ID, timestamp) is stripped before anything is uploaded.",
+  },
+  {
+    title: "Your conversation with your guide",
+    tag: "Stored" as const,
+    variant: "success" as const,
+    detail:
+      "So you can pick up where you left off, along with your notification and accessibility preferences.",
+  },
 ];
 
 export default function WhatWeStorePage() {
@@ -29,29 +42,20 @@ export default function WhatWeStorePage() {
         systems that already legitimately hold that data.
       </p>
 
-      <section className="rounded-card border border-border bg-surface p-4">
-        <h2 className="mb-2 flex items-center gap-2 text-base font-medium text-text-primary">
-          <IconCheck size={18} className="text-success" aria-hidden="true" />
-          What we keep
-        </h2>
-        <ul className="flex flex-col gap-2 text-sm text-text-primary">
-          {WE_KEEP.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
+      {CATEGORIES.map((category) => (
+        <section key={category.title} className="rounded-card border border-border bg-surface p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-medium text-text-primary">{category.title}</h2>
+            <StatusTag variant={category.variant} label={category.tag} />
+          </div>
+          <p className="mt-2 text-sm text-text-secondary">{category.detail}</p>
+        </section>
+      ))}
 
-      <section className="rounded-card border border-border bg-surface p-4">
-        <h2 className="mb-2 flex items-center gap-2 text-base font-medium text-text-primary">
-          <IconX size={18} className="text-danger" aria-hidden="true" />
-          What we don&apos;t keep
-        </h2>
-        <ul className="flex flex-col gap-2 text-sm text-text-primary">
-          {WE_DONT_KEEP.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
+      <label className="flex w-fit items-center gap-2 text-sm text-text-primary">
+        <input type="checkbox" className="h-4 w-4 rounded-sm border-border accent-accent" />
+        I&apos;ve read our full privacy approach above
+      </label>
     </PageContainer>
   );
 }

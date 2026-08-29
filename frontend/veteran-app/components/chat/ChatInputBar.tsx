@@ -107,9 +107,9 @@ export function ChatInputBar({
             submit();
           }
         }}
-        placeholder={listening ? "Listening…" : "Type your answer"}
+        placeholder={listening ? "Listening…" : "Type or speak"}
         rows={1}
-        className="min-h-11 flex-1 resize-none rounded-control border border-border bg-background px-3 py-2.5 text-base text-text-primary outline-none focus-visible:border-accent"
+        className="min-h-11 flex-1 resize-none rounded-full border border-border bg-background px-4 py-2.5 text-base text-text-primary outline-none focus-visible:border-accent"
       />
       {voiceSupported && (
         <button
@@ -118,7 +118,7 @@ export function ChatInputBar({
           aria-pressed={listening}
           aria-label={listening ? "Stop voice input" : "Start voice input"}
           className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-control border",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
             listening
               ? "border-accent bg-accent-tint text-accent"
               : "border-border bg-background text-text-secondary",
@@ -136,7 +136,7 @@ export function ChatInputBar({
         type="submit"
         disabled={disabled || text.trim().length === 0}
         aria-label="Send message"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control bg-accent text-white disabled:opacity-40"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:opacity-40"
       >
         <IconSend size={18} aria-hidden="true" />
       </button>

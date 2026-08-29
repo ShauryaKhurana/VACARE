@@ -53,9 +53,16 @@ export default function DeletePage() {
       <h1 className="text-xl font-medium text-text-primary">Delete my data</h1>
       <p className="text-sm text-text-secondary">
         This is a simple, honest control -- no maze, no retention tricks. It removes the routing
-        identifier and conversation we hold; it does not touch your claim record with VA or your
-        VSO.
+        identifier and conversation we hold.
       </p>
+
+      <div className="rounded-card border border-border bg-surface p-4">
+        <h2 className="text-sm font-medium text-text-primary">This does not affect</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Your claim record with VA or your VSO -- that lives with them, not us, and stays exactly
+          as it is.
+        </p>
+      </div>
 
       <Button
         variant="destructive"

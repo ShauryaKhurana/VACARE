@@ -10,6 +10,7 @@ function AccessibilityEffects() {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.toggle("va-small-text", textSize === "small");
     root.classList.toggle("va-large-text", textSize === "large");
   }, [textSize]);
 

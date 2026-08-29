@@ -26,22 +26,34 @@ export default function AccessibilityPage() {
 
       <section className="rounded-card border border-border bg-surface p-4">
         <h2 className="mb-2 text-base font-medium text-text-primary">Text size</h2>
-        <div className="flex gap-2" role="radiogroup" aria-label="Text size">
-          {(["default", "large"] as const).map((size) => (
+        <div
+          className="flex divide-x divide-border overflow-hidden rounded-control border border-border"
+          role="radiogroup"
+          aria-label="Text size"
+        >
+          {(
+            [
+              { value: "small", glyph: "A−", fontSize: "14px", label: "Small text" },
+              { value: "default", glyph: "A", fontSize: "17px", label: "Default text size" },
+              { value: "large", glyph: "A+", fontSize: "20px", label: "Large text" },
+            ] as const
+          ).map((option) => (
             <button
-              key={size}
+              key={option.value}
               type="button"
               role="radio"
-              aria-checked={textSize === size}
-              onClick={() => setTextSize(size)}
+              aria-checked={textSize === option.value}
+              aria-label={option.label}
+              onClick={() => setTextSize(option.value)}
               className={cn(
-                "rounded-control border px-4 py-2 text-sm",
-                textSize === size
-                  ? "border-accent bg-accent-tint text-accent font-medium"
-                  : "border-border text-text-secondary",
+                "flex flex-1 items-center justify-center py-2.5 font-medium",
+                textSize === option.value
+                  ? "bg-accent-tint text-accent"
+                  : "text-text-secondary",
               )}
+              style={{ fontSize: option.fontSize }}
             >
-              {size === "default" ? "Default" : "Large"}
+              {option.glyph}
             </button>
           ))}
         </div>

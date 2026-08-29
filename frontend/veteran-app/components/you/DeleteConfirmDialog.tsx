@@ -41,7 +41,7 @@ export function DeleteConfirmDialog({
             className="rounded-control"
             onClick={() => onOpenChange(false)}
           >
-            Keep my data
+            Cancel
           </Button>
           <Button
             type="button"
@@ -50,7 +50,7 @@ export function DeleteConfirmDialog({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? "Deleting…" : "Delete my data"}
+            {loading ? "Deleting…" : "Yes, delete everything"}
           </Button>
         </DialogFooter>
       </DialogContent>

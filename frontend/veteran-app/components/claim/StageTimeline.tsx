@@ -1,85 +1,62 @@
-"use client";
-
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ClaimStage } from "@/lib/api/types";
 
-const TIMELINE_STAGES: { stage: ClaimStage; label: string; explainer: string }[] = [
-  {
-    stage: "submitted",
-    label: "Submitted",
-    explainer: "Your claim has been received by VA.",
-  },
-  {
-    stage: "development",
-    label: "Under review",
-    explainer: "VA is gathering evidence -- records, and sometimes an exam.",
-  },
-  {
-    stage: "exam-scheduled",
-    label: "Exam",
-    explainer: "If your claim needs one, a doctor's evaluation happens here.",
-  },
-  {
-    stage: "resolved",
-    label: "Decision",
-    explainer: "VA issues a decision on each condition you claimed.",
-  },
+const TIMELINE_STAGES: { stage: ClaimStage; label: string }[] = [
+  { stage: "submitted", label: "Submitted" },
+  { stage: "development", label: "Under review" },
+  { stage: "exam-scheduled", label: "Exam" },
+  { stage: "resolved", label: "Decision" },
 ];
 
 const STAGE_ORDER: ClaimStage[] = ["submitted", "development", "exam-scheduled", "resolved"];
 
+/** Horizontal stepper (Wireframe 3/4), not a vertical list -- current position highlighted. */
 export function StageTimeline({ currentStage }: { currentStage: ClaimStage }) {
   const currentIndex = STAGE_ORDER.indexOf(currentStage);
-  const [expandedStage, setExpandedStage] = useState<ClaimStage | null>(null);
+  const lastIndex = TIMELINE_STAGES.length - 1;
+  const filledPercent = (currentIndex / lastIndex) * 100;
 
   return (
-    <ol className="flex flex-col gap-0">
-      {TIMELINE_STAGES.map((item, i) => {
-        const isDone = i < currentIndex;
-        const isCurrent = i === currentIndex;
-        const isExpanded = expandedStage === item.stage;
-        return (
-          <li key={item.stage} className="flex gap-3">
-            <div className="flex flex-col items-center">
+    <div className="relative pt-[5px]">
+      <div
+        className="absolute top-[5px] h-px bg-border"
+        style={{ left: `${50 / TIMELINE_STAGES.length}%`, right: `${50 / TIMELINE_STAGES.length}%` }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute top-[5px] h-px bg-accent"
+        style={{
+          left: `${50 / TIMELINE_STAGES.length}%`,
+          width: `${(filledPercent / 100) * (100 - 100 / TIMELINE_STAGES.length)}%`,
+        }}
+        aria-hidden="true"
+      />
+      <ol className="relative flex">
+        {TIMELINE_STAGES.map((item, i) => {
+          const isDone = i < currentIndex;
+          const isCurrent = i === currentIndex;
+          return (
+            <li key={item.stage} className="flex flex-1 flex-col items-center gap-2 text-center">
               <span
                 className={cn(
-                  "flex h-3 w-3 shrink-0 rounded-full border-2",
-                  isDone || isCurrent
-                    ? "border-accent bg-accent"
-                    : "border-border bg-surface",
+                  "h-[11px] w-[11px] shrink-0 rounded-full border-2",
+                  isDone || isCurrent ? "border-accent bg-accent" : "border-border bg-surface",
                 )}
                 aria-hidden="true"
               />
-              {i < TIMELINE_STAGES.length - 1 && (
-                <span
-                  className={cn("w-px flex-1", isDone ? "bg-accent" : "bg-border")}
-                  aria-hidden="true"
-                />
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setExpandedStage(isExpanded ? null : item.stage)}
-              className="flex-1 pb-4 text-left"
-              aria-expanded={isExpanded}
-            >
               <span
                 className={cn(
-                  "text-sm",
+                  "text-xs",
                   isCurrent ? "font-medium text-text-primary" : "text-text-secondary",
                 )}
               >
                 {item.label}
-                {isCurrent && <span className="ml-2 text-xs text-accent">(you are here)</span>}
               </span>
-              {isExpanded && (
-                <p className="mt-1 text-sm text-text-secondary">{item.explainer}</p>
-              )}
-            </button>
-          </li>
-        );
-      })}
-    </ol>
+              {isCurrent && <span className="text-[11px] text-accent">(you are here)</span>}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }

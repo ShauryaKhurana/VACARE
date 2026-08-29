@@ -97,7 +97,11 @@
   }
 }
 
-/* Accessibility: large-text mode, toggled via a class on <html> from accessibilityStore */
+/* Accessibility: text-size mode (A-/A/A+, Wireframe 10), toggled via a class on <html> */
+html.va-small-text body {
+  font-size: 15px;
+  line-height: 1.6;
+}
 html.va-large-text body {
   font-size: 20px;
   line-height: 1.7;

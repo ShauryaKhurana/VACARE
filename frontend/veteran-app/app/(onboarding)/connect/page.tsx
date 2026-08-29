@@ -41,13 +41,16 @@ export default function ConnectPage() {
           <div className="w-full max-w-sm text-left md:max-w-md">
             <VsoCard vso={claim.vso} />
           </div>
-          <p className="max-w-sm text-sm text-text-secondary md:max-w-md">
-            {claim.vso.name} typically reviews a claim like yours within a few business days and
-            may reach out with questions. A real, credentialed person -- not a black box -- is now
-            handling your claim.
-          </p>
+          <div className="w-full max-w-sm text-left md:max-w-md">
+            <h2 className="text-sm font-medium text-text-primary">What happens next</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              {claim.vso.name} typically reviews a claim like yours within a few business days and
+              may reach out with questions. A real, credentialed person -- not a black box -- is
+              now handling your claim.
+            </p>
+          </div>
           <AccentButton type="button" onClick={() => router.push("/claim")} className="w-full max-w-sm md:max-w-md">
-            Go to My claim
+            Continue to my claim
           </AccentButton>
         </>
       )}

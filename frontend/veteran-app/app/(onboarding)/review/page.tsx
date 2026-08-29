@@ -16,8 +16,10 @@ const SERVICE_INFO = [
 ];
 
 const AUTO_CONDITIONS = ["Tinnitus", "Burn-pit related conditions"];
-const NEEDS_EVIDENCE_CONDITIONS = ["Right shoulder strain"];
+const NEEDS_EVIDENCE_CONDITIONS = ["Right shoulder strain -- personal statement saved"];
+const DOCUMENTS = ["DD-214 -- uploaded"];
 
+/** Wireframe 2: four separate boxes, each independently editable -- not one combined section. */
 function Section({
   title,
   editHref,
@@ -75,35 +77,42 @@ export default function ReviewPage() {
         </dl>
       </Section>
 
-      <Section title="Conditions" editHref="/talk">
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="mb-1.5 flex items-center gap-1.5 text-sm text-text-secondary">
-              Qualifies automatically <ComputedTag />
-            </p>
-            <ul className="flex flex-col gap-1 text-sm text-text-primary">
-              {AUTO_CONDITIONS.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="mb-1.5 text-sm text-text-secondary">Needs evidence</p>
-            <ul className="flex flex-col gap-1 text-sm text-text-primary">
-              {NEEDS_EVIDENCE_CONDITIONS.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
+      <Section title="Conditions -- qualifies automatically" editHref="/talk">
+        <div className="mb-1.5">
+          <ComputedTag />
         </div>
-      </Section>
-
-      <Section title="Statements &amp; documents" editHref="/talk">
         <ul className="flex flex-col gap-1 text-sm text-text-primary">
-          <li>DD-214 -- uploaded</li>
-          <li>Personal statement (right shoulder) -- saved</li>
+          {AUTO_CONDITIONS.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
         </ul>
       </Section>
+
+      <Section title="Conditions -- needs evidence" editHref="/talk">
+        <ul className="flex flex-col gap-1 text-sm text-text-primary">
+          {NEEDS_EVIDENCE_CONDITIONS.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section title="Documents" editHref="/talk">
+        <ul className="flex flex-col gap-1 text-sm text-text-primary">
+          {DOCUMENTS.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      </Section>
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-sm">
+          <span className="text-text-primary">Ready for your VSO</span>
+          <span className="text-text-secondary">Complete</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+          <div className="h-full w-full rounded-full bg-accent" />
+        </div>
+      </div>
 
       <p className="text-sm text-text-secondary">
         You&apos;re confirming this is accurate. Your VSO will review it next.

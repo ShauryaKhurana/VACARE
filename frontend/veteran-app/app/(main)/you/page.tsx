@@ -24,6 +24,12 @@ export default function YouPage() {
           description="Contact info for the person handling your claim"
         />
         <SettingsRow
+          href="/you/help"
+          icon={IconLifebuoy}
+          label="Help"
+          description="Reach a human, independent of this app"
+        />
+        <SettingsRow
           href="/you/notifications"
           icon={IconBell}
           label="Notifications"
@@ -34,12 +40,6 @@ export default function YouPage() {
           icon={IconAccessible}
           label="Accessibility"
           description="Text size, contrast, and voice input"
-        />
-        <SettingsRow
-          href="/you/help"
-          icon={IconLifebuoy}
-          label="Help"
-          description="Reach a human, independent of this app"
         />
         <SettingsRow
           href="/you/delete"

@@ -106,32 +106,6 @@ export function ChatThread() {
             isSparse && "md:justify-center",
           )}
         >
-          {isSparse && greeting && (
-            <div className="hidden flex-col items-center gap-5 pb-2 text-center md:flex">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-accent-tint text-accent">
-                <IconMessageCircle2 size={32} aria-hidden="true" />
-              </div>
-              <div className="flex max-w-md flex-col gap-2">
-                <h1 className="text-2xl font-medium text-text-primary">
-                  Let&apos;s get your claim started
-                </h1>
-                <p className="text-base text-text-secondary">{greeting}</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {STARTER_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => void advance(prompt)}
-                    className="rounded-full border border-border bg-surface px-4 py-2 text-sm text-text-primary transition-colors hover:border-accent hover:text-accent"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className={cn("flex flex-col gap-3", isSparse && "md:hidden")}>
             <ProgressChecklist completedSteps={stepsDone} />
 
@@ -203,6 +177,32 @@ export function ChatThread() {
               </div>
             )}
           </div>
+
+          {isSparse && greeting && (
+            <div className="hidden flex-col items-center gap-5 pb-2 text-center md:flex">
+              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-accent-tint text-accent">
+                <IconMessageCircle2 size={32} aria-hidden="true" />
+              </div>
+              <div className="flex max-w-md flex-col gap-2">
+                <h1 className="text-2xl font-medium text-text-primary">
+                  Let&apos;s get your claim started
+                </h1>
+                <p className="text-base text-text-secondary">{greeting}</p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {STARTER_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void advance(prompt)}
+                    className="rounded-full border border-border bg-surface px-4 py-2 text-sm text-text-primary transition-colors hover:border-accent hover:text-accent"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>

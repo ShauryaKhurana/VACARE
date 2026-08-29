@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type TextSize = "default" | "large";
+export type TextSize = "small" | "default" | "large";
 
 export type NotificationChannel = "push" | "sms" | "email";
 
