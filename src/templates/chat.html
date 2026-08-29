@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Let's get your claim together</h1>
+<p class="muted">Answer in your own words. I'll ask as little as possible and read the rest off
+your documents. Nothing here is filed anywhere.</p>
+
+{% if not have_key %}
+<div class="banner" style="border-left-color:#b3261e">
+  No <span class="form-no">GEMINI_API_KEY</span> found, so I can't read documents or parse your
+  story yet. Add one to <span class="form-no">.env</span> and reload.
+</div>
+{% endif %}
+
+<div class="card" style="border-width:2px">
+  {% for msg in session.transcript %}
+    {% if msg.role == 'bot' %}
+      <div style="margin:12px 0"><span class="badge b-va">vacare</span>
+        <span style="margin-left:6px">{{ msg.text }}</span></div>
+    {% else %}
+      <div style="margin:12px 0 12px 28px; padding-left:12px; border-left:3px solid var(--you)">
+        <span class="muted" style="font-size:13px">you</span><br>{{ msg.text }}
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% if not done %}
+<form method="post" action="/chat" enctype="multipart/form-data">
+  <label>{{ question.text }}</label>
+  {% if question.help_text %}<p class="muted" style="font-size:13.5px; margin:2px 0 8px">{{ question.help_text }}</p>{% endif %}
+
+  {% if question.options %}
+  <div style="margin-bottom:8px">
+    {% for option in question.options %}
+      <button type="submit" name="message" value="{{ option }}" class="btn ghost"
+              style="margin:3px 4px 3px 0; font-weight:400">{{ option }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <textarea name="message" rows="{{ 4 if question.slot.value == 'story' else 2 }}"
+            placeholder="Type your answer..."></textarea>
+
+  {% if question.accepts_upload %}
+  <label style="margin-top:12px">Or upload a document (PDF or photo)</label>
+  <input type="file" name="document" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt">
+  <p class="muted" style="font-size:13px">DD-214, medical records, decision letter - I'll work out
+     which is which and pull the details out.</p>
+  {% endif %}
+
+  <p style="margin-top:14px">
+    <button type="submit">Send</button>
+    <a href="/chat/reset" class="btn ghost">Start over</a>
+  </p>
+</form>
+{% else %}
+<div class="banner" style="border-left-color:#1e6f45"><b>That's everything I need.</b></div>
+<form method="post" action="/chat/finish">
+  <button type="submit">Build my claim packet</button>
+  <a href="/chat/reset" class="btn ghost">Start over</a>
+</form>
+{% endif %}
+
+{% if claim.conditions %}
+<h2>What I have so far</h2>
+<div class="wash">
+  <b>{{ claim.veteran.full_name }}</b>
+  {% if claim.veteran.dob %} &middot; born {{ claim.veteran.dob }}{% endif %}
+  {% if claim.veteran.branch %} &middot; {{ claim.veteran.branch.value.replace('_',' ') }}{% endif %}
+  {% if claim.veteran.service_start %} &middot; {{ claim.veteran.service_start }} to
+    {{ claim.veteran.service_end or 'present' }}{% endif %}
+  {% if lane_title %}<br><span class="muted">Lane:</span> {{ lane_title }}{% endif %}
+</div>
+
+<table style="margin-top:12px">
+  <tr><th>Condition</th><th>Since</th><th>Service link</th></tr>
+  {% for c in claim.conditions %}
+  <tr>
+    <td><b>{{ c.name }}</b><div class="muted" style="font-size:13px">{{ c.current_symptoms }}</div></td>
+    <td>{{ c.onset_date or "-" }}</td>
+    <td class="muted">
+      {% if c.started_in_service %}began in service{% elif c.worsened_in_service %}worsened in service{% else %}not established{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if claim.evidence %}
+<p style="margin-top:10px"><span class="muted">Documents read:</span>
+  {% for e in claim.evidence %}<span class="badge b-veteran" style="margin-right:4px">{{ e.evidence_type.value.replace('_',' ') }}</span>{% endfor %}
+</p>
+{% endif %}
+
+{% if deadlines %}
+<h3>Clocks already running</h3>
+{% for d in deadlines %}
+<div class="dl {{ d.urgency }}"><div><b>{{ d.label }}</b></div>
+  <div class="days">{% if d.expired %}EXPIRED{% else %}{{ d.days_left }} days{% endif %}</div></div>
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endblock %}

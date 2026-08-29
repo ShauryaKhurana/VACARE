@@ -10,16 +10,18 @@ Every page is a thin view over the same modules the CLI uses.
 
 from __future__ import annotations
 
+import tempfile
+import uuid
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from src import evidence_rules, lanes, packet as packet_view
+from src import evidence_rules, gemini, intake_chat, lanes, packet as packet_view
 from src.claim_intake import ClaimIntake
 from src.models import (
     Branch,
@@ -30,6 +32,7 @@ from src.models import (
     LaneContext,
     Veteran,
 )
+from src.formfill import fill_526ez
 from src.storage import DEFAULT_DB_PATH, ClaimStore
 
 app = FastAPI(title="VACARE")
@@ -251,6 +254,120 @@ def packet(claim_id: str) -> str:
 def form_library(request: Request) -> HTMLResponse:
     from src.forms import all_forms
     return templates.TemplateResponse(request, "forms.html", {"forms": all_forms()})
+
+
+
+
+# ---------------------------------------------------------------------------
+# Conversational intake
+# ---------------------------------------------------------------------------
+
+# In-memory sessions, keyed by a cookie. Fine for a single-user MVP; a real
+# deployment would put these in the database alongside the claim.
+CHAT_SESSIONS: dict = {}
+SESSION_COOKIE = "vacare_chat"
+
+
+def _session_for(request: Request) -> tuple:
+    """Return (session_id, Session), creating one if the cookie is new."""
+    session_id = request.cookies.get(SESSION_COOKIE)
+    if not session_id or session_id not in CHAT_SESSIONS:
+        session_id = uuid.uuid4().hex[:12]
+        CHAT_SESSIONS[session_id] = intake_chat.new_session()
+    return session_id, CHAT_SESSIONS[session_id]
+
+
+def _chat_page(request: Request, session_id: str, session) -> HTMLResponse:
+    question = intake_chat.next_question(session)
+    claim = session.claim
+    done = question.slot == intake_chat.Slot.DONE
+
+    response = templates.TemplateResponse(request, "chat.html", {
+        "session": session,
+        "question": question,
+        "done": done,
+        "claim": claim,
+        "have_key": gemini.available(),
+        "model": gemini.model_name(),
+        "lane_title": lanes.LANE_TITLES[lanes.determine_lane(claim.context)] if claim.conditions else None,
+        "deadlines": lanes.deadlines(claim) if claim.conditions else [],
+    })
+    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/chat", response_class=HTMLResponse)
+def chat_page(request: Request) -> HTMLResponse:
+    session_id, session = _session_for(request)
+    if not session.transcript:
+        session.say("bot", intake_chat.next_question(session).text)
+    return _chat_page(request, session_id, session)
+
+
+@app.post("/chat", response_class=HTMLResponse)
+async def chat_reply(request: Request) -> HTMLResponse:
+    session_id, session = _session_for(request)
+    form = await request.form()
+    text = str(form.get("message", "")).strip()
+
+    upload = form.get("document")
+    if upload is not None and getattr(upload, "filename", ""):
+        data = await upload.read()
+        if data:
+            try:
+                receipt = intake_chat.apply_document(
+                    session, intake_chat.Attachment(upload.filename, data)
+                )
+            except gemini.GeminiError as error:
+                receipt = f"I couldn't read that file: {error}"
+            session.say("bot", receipt)
+
+    if text:
+        try:
+            receipt = intake_chat.apply_answer(session, text)
+        except gemini.GeminiError as error:
+            receipt = f"Something went wrong reading that: {error}"
+        session.say("bot", receipt)
+
+    question = intake_chat.next_question(session)
+    if question.slot != intake_chat.Slot.DONE:
+        session.say("bot", question.text)
+
+    return RedirectResponse("/chat", status_code=303)
+
+
+@app.post("/chat/finish")
+def chat_finish(request: Request) -> RedirectResponse:
+    """Save the conversation's claim into the database and open its dashboard."""
+    _, session = _session_for(request)
+    claim = session.claim
+    ClaimIntake(claim).evaluate_readiness()
+    with store() as db:
+        db.save_claim(claim)
+    return RedirectResponse(f"/claim/{claim.id}", status_code=303)
+
+
+@app.get("/chat/reset")
+def chat_reset(request: Request) -> RedirectResponse:
+    session_id = request.cookies.get(SESSION_COOKIE)
+    CHAT_SESSIONS.pop(session_id, None)
+    response = RedirectResponse("/chat", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@app.get("/claim/{claim_id}/526ez")
+def download_526ez(claim_id: str):
+    """The filled 21-526EZ, generated on demand."""
+    with store() as db:
+        claim = db.load_claim(claim_id)
+    if claim is None:
+        return RedirectResponse("/", status_code=303)
+
+    output = Path(tempfile.gettempdir()) / f"21-526EZ-{claim.id}.pdf"
+    fill_526ez(claim, output)
+    return FileResponse(output, media_type="application/pdf",
+                        filename=f"21-526EZ-{claim.veteran.last_name}.pdf")
 
 
 def main() -> None:
