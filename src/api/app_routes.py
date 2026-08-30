@@ -30,6 +30,17 @@ def _store() -> ClaimStore:
     return ClaimStore(DEFAULT_DB_PATH)
 
 
+def _opening_index(session) -> int:
+    """Where this turn's new messages begin.
+
+    A session created during the request already carries its opening
+    question, added before anything measured the transcript. Slicing from the
+    current length would drop it, leaving the client with an upload card and
+    no question above it — which is what "Start over" looked like.
+    """
+    return 0 if getattr(session, "just_created", False) else len(session.transcript)
+
+
 def _load_session(routing_id: str, create: bool = True):
     """Rehydrate a chat session for a routing id, creating one if it is new.
 
@@ -54,6 +65,7 @@ def _load_session(routing_id: str, create: bool = True):
     session = intake_chat.new_session()
     session.claim.id = routing_id
     session.say("bot", intake_chat.next_question(session).text)
+    session.just_created = True
     _persist(session)
     return session
 
@@ -121,7 +133,7 @@ def create_claim() -> Dict[str, Any]:
 def send_chat_message(routing_id: str, body: ChatRequest) -> Dict[str, Any]:
     """One conversational turn. Returns only the messages this turn added."""
     session = _load_session(routing_id)
-    before = len(session.transcript)
+    before = _opening_index(session)
 
     # An empty send is not an answer. It used to be handed to the extractor,
     # which spent a full model call reading "" and, at some steps, took the
@@ -169,7 +181,7 @@ async def upload_document(routing_id: str, file: UploadFile = File(...)) -> Dict
     """Upload a document into the conversation and get the receipt back."""
     session = _load_session(routing_id)
     data = await file.read()
-    before = len(session.transcript)
+    before = _opening_index(session)
     try:
         result = intake_chat.apply_document(
             session, intake_chat.Attachment(file.filename or "upload", data)

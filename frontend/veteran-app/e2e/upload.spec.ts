@@ -45,6 +45,8 @@ function trackUploads(page: import("@playwright/test").Page): number[] {
   return statuses;
 }
 
+test.describe.configure({ timeout: 180_000 });
+
 test.describe("document upload", () => {
   test("the composer's attach button sends the file to the backend", async ({ page }) => {
     const statuses = trackUploads(page);
@@ -54,7 +56,8 @@ test.describe("document upload", () => {
     await composerPicker.waitFor({ state: "attached", timeout: 30_000 });
     await composerPicker.setInputFiles(DD214);
 
-    await expect.poll(() => statuses.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    // Every upload is read afresh now, so a scanned PDF is a real model call.
+    await expect.poll(() => statuses.length, { timeout: 120_000 }).toBeGreaterThan(0);
     expect(statuses.every((status) => status < 400)).toBe(true);
     // And the thread no longer shows the old "Attached: <name>" stand-in.
     await expect(page.getByText(/^Attached: /)).toHaveCount(0);
@@ -68,7 +71,8 @@ test.describe("document upload", () => {
     await cardPicker.waitFor({ state: "attached", timeout: 30_000 });
     await cardPicker.setInputFiles(DD214);
 
-    await expect.poll(() => statuses.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    // Every upload is read afresh now, so a scanned PDF is a real model call.
+    await expect.poll(() => statuses.length, { timeout: 120_000 }).toBeGreaterThan(0);
     expect(statuses.every((status) => status < 400)).toBe(true);
     // The parse must actually land in the thread, not just return 200.
     await expect(page.getByText(/Marcus Rivera/i).first()).toBeVisible({ timeout: 60_000 });

@@ -39,6 +39,34 @@ test("start over clears the conversation and it stays cleared", async ({ page })
   await expect(page.getByText(/Marcus Rivera/i)).toHaveCount(0);
 });
 
+test("start over leaves a usable conversation, not an empty thread", async ({ page }) => {
+  // The old tests only checked the previous claim was gone. They passed while
+  // the restart returned an upload card with no question above it, because
+  // the freshly created session's opening line fell outside the turn.
+  await page.goto("/talk");
+  await page.locator('input[type="file"]').last().setInputFiles(DD214);
+  await expect(page.getByText(/Marcus Rivera/i).first()).toBeVisible({ timeout: 60_000 });
+
+  const startOver = page.getByRole("button", { name: /^start over$/i });
+  await expect(startOver).toBeEnabled({ timeout: 15_000 });
+  await startOver.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await dialog.getByRole("button", { name: /start over|delete|confirm|yes/i }).last().click();
+
+  // A question to answer, and a way to answer it.
+  await expect(page.getByText(/What hurts or bothers you/i).first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.locator('input[type="file"]').first()).toBeAttached();
+
+  // And the conversation actually continues from there.
+  const composer = page.locator("textarea:visible").first();
+  await composer.fill("my knees hurt");
+  await composer.press("Enter");
+  await expect(page.getByText(/my knees hurt/i).first()).toBeVisible({ timeout: 30_000 });
+});
+
 test("start over still works after a reload", async ({ page }) => {
   // Progress lived only in React state, so a reload reset it to zero and
   // greyed the control out again -- with the DD-214 still confirmed on

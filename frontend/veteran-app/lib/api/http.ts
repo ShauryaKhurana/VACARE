@@ -22,6 +22,13 @@ function clearLocalChatState(routingId: string): void {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
+ * Reading a document is a model call over a scanned PDF, not a chat turn, and
+ * every upload is read afresh rather than reused. Thirty seconds was cutting
+ * off perfectly good uploads and telling the veteran the server was too slow.
+ */
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+/**
  * Turns an error response into one line a veteran can read.
  *
  * FastAPI returns `detail` as a string for our own errors but as an array of
@@ -57,9 +64,13 @@ export class HttpApiClient implements ApiClient {
     return `${this.baseUrl.replace(/\/$/, "")}/api/app${path}`;
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+  private async request<T>(
+    path: string,
+    init?: RequestInit,
+    timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  ): Promise<T> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(this.url(path), {
@@ -113,6 +124,7 @@ export class HttpApiClient implements ApiClient {
     const body = await this.request<{ messages: ChatMessage[] }>(
       `/claims/${encodeURIComponent(routingId)}/documents`,
       { method: "POST", body: form },
+      UPLOAD_TIMEOUT_MS,
     );
     return body.messages;
   }
