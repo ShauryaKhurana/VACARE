@@ -55,7 +55,9 @@ export const ChatInputBar = forwardRef<
   ChatInputBarHandle,
   {
     onSend: (text: string) => void;
-    onAttach: (fileName: string) => void;
+    /** Receives the prepared file itself, not just its name: the composer
+     *  previously announced "Attached: X" in the thread and dropped the file. */
+    onAttach: (file: Blob, fileName: string) => Promise<void> | void;
     disabled?: boolean;
   }
 >(function ChatInputBar({ onSend, onAttach, disabled }, ref) {
@@ -121,8 +123,8 @@ export const ChatInputBar = forwardRef<
   async function handleFileSelected(file: File) {
     setAttaching(true);
     try {
-      await prepareCapturedFile(file);
-      onAttach(file.name);
+      const prepared = await prepareCapturedFile(file);
+      await onAttach(prepared.blob, file.name);
     } catch {
       // A failed attach here is non-blocking -- the veteran can just try
       // again, or bring the document up when the dig actually asks for it.

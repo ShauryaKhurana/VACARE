@@ -13,9 +13,10 @@ import { UpcomingCard } from "@/components/claim/UpcomingCard";
 import { UpdatesFeed } from "@/components/claim/UpdatesFeed";
 import { ResolvedBanner } from "@/components/claim/ResolvedBanner";
 import { FixtureSwitcher, CLAIM_FIXTURE_ROUTING_IDS } from "@/components/dev/FixtureSwitcher";
-import { IconMessageCircle2, IconBadge, IconAlertTriangle, IconCalendarEvent, IconHistory } from "@tabler/icons-react";
+import { IconMessageCircle2, IconBadge, IconAlertTriangle, IconCalendarEvent, IconHistory, IconFileText } from "@tabler/icons-react";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
+import { DraftFormCard } from "@/components/chat/DraftFormCard";
 
 export default function ClaimPage() {
   return (
@@ -95,6 +96,14 @@ function ClaimPageContent() {
           </div>
         </section>
       )}
+
+      <section>
+        <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">
+          <IconFileText size={20} className="text-text-secondary" aria-hidden="true" />
+          Your paperwork
+        </h2>
+        <DraftFormCard routingId={claim.routingId} />
+      </section>
 
       <section>
         <h2 className="mb-2 flex items-center gap-2 text-lg font-medium text-text-primary">

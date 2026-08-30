@@ -47,6 +47,80 @@ const QUICK_EDIT_TARGETS = ["Service info", "Conditions", "Documents", "Statemen
 /** The exact phrase the scripted closing turn uses -- a stable marker for detecting a resumed, already-finished dig without a dedicated "done" flag on the mock API. */
 const REVIEW_HANDOFF_MARKER = "Review & confirm";
 
+/**
+ * Affordances for the *current* question rather than a record of what was
+ * said. The server re-sends them every turn the question stays open, so they
+ * are replaced, never accumulated -- otherwise a veteran who uploads twice
+ * ends up looking at a stack of identical upload cards.
+ */
+const TRANSIENT_TYPES = new Set<ChatMessage["type"]>(["document-upload", "quick-replies"]);
+
+/**
+ * Merges a turn into the thread: drops any superseded affordance, then
+ * appends only messages the thread does not already hold.
+ *
+ * The thread merges three sources — messages restored from localStorage, the
+ * turn returned by the server, and the optimistic bubble drawn the instant
+ * the veteran hits send — so the same id can legitimately arrive twice.
+ * React then warns about duplicate keys and may drop or duplicate a bubble.
+ */
+function appendUnique(previous: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const seen = new Set(previous.map((message) => message.id));
+  const fresh = incoming.filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+  if (fresh.length === 0) return previous;
+
+  // Only clear old affordances when the turn brings replacements; a turn of
+  // plain text should leave the veteran's current upload card alone.
+  const kept = fresh.some((message) => TRANSIENT_TYPES.has(message.type))
+    ? previous.filter((message) => !TRANSIENT_TYPES.has(message.type))
+    : previous;
+
+  return [...kept, ...fresh];
+}
+
+/**
+ * Works out how far the dig got from the thread itself.
+ *
+ * Progress lived only in React state, so every reload reset it to zero: the
+ * rail snapped back to "Service info" and "Start over" greyed out again even
+ * though the veteran had already confirmed their DD-214. The conversation is
+ * the durable record, so the step count is read back from it.
+ */
+function deriveStepsDone(messages: ChatMessage[]): number {
+  let steps = 0;
+  for (const message of messages) {
+    if (message.type === "confirmation-card") steps = Math.max(steps, 1);
+    if (message.type === "eligibility-card") steps = Math.max(steps, 2);
+    if (message.type === "statement-builder") steps = Math.max(steps, 3);
+    if (message.type === "ai-text" && message.text.includes(REVIEW_HANDOFF_MARKER)) {
+      steps = Math.max(steps, 3);
+    }
+  }
+  return steps;
+}
+
+/**
+ * Keeps only the most recent of each transient affordance.
+ *
+ * A thread persisted by an earlier build can already contain a stack of
+ * identical upload cards; restoring it verbatim puts them straight back on
+ * screen.
+ */
+function pruneStaleAffordances(messages: ChatMessage[]): ChatMessage[] {
+  const lastOfType = new Map<string, string>();
+  for (const message of messages) {
+    if (TRANSIENT_TYPES.has(message.type)) lastOfType.set(message.type, message.id);
+  }
+  return messages.filter(
+    (message) =>
+      !TRANSIENT_TYPES.has(message.type) || lastOfType.get(message.type) === message.id,
+  );
+}
+
 export function ChatThread() {
   const routingId = useSessionStore((s) => s.routingId);
   const startSession = useSessionStore((s) => s.startSession);
@@ -93,11 +167,14 @@ export function ChatThread() {
           // read once here rather than during render to avoid a hydration
           // mismatch against the server-rendered (empty) thread.
           // eslint-disable-next-line react-hooks/set-state-in-effect
-          setMessages(parsed);
+          const restored = pruneStaleAffordances(appendUnique([], parsed));
+          setMessages(restored);
           setShowResumeBanner(true);
-          if (parsed.length > 1) markConversationStarted();
-          if (parsed.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
-            setStepsDone(3);
+          if (restored.length > 1) markConversationStarted();
+          // Progress has to come back with the conversation, or the rail and
+          // "Start over" both reset on every reload.
+          setStepsDone(deriveStepsDone(restored));
+          if (restored.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
             setDigComplete(true);
           }
           return;
@@ -146,7 +223,7 @@ export function ChatThread() {
     }
     setLoading(true);
     const turn = await apiClient.sendChatMessage(routingId, veteranText ?? "");
-    setMessages((prev) => [...prev, ...turn]);
+    setMessages((prev) => appendUnique(prev, turn));
     setTurnCount((count) => {
       const next = count + 1;
       // The opening greeting (turn 1) is also all-ai-text with no card --
@@ -230,7 +307,7 @@ export function ChatThread() {
   // Nothing to discard yet if the veteran hasn't moved past Service info --
   // a claim that was already submitted is always a real thing to start over
   // from, regardless of this dig's own step count.
-  const canStartOver = claimSubmitted || stepsDone > 0;
+  const canStartOver = claimSubmitted || stepsDone > 0 || messages.length > 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -285,7 +362,7 @@ export function ChatThread() {
               setRestartTarget(null);
               setRestartDialogOpen(true);
             }}
-            aria-label={canStartOver ? undefined : "Start over -- available once you've moved past Service info"}
+            aria-label={canStartOver ? undefined : "Start over -- available once you've said something"}
             className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
           >
             Start over
@@ -353,7 +430,13 @@ export function ChatThread() {
                         <DocumentUploadCard
                           key={message.id}
                           prompt={message.prompt}
-                          onParsed={() => void advance()}
+                          routingId={routingId ?? ""}
+                          onUploaded={(turn) => {
+                            markConversationStarted();
+                            setMessages((prev) => appendUnique(prev, turn));
+                            setStepsDone((n) => Math.max(n, 1));
+                          }}
+                          onSkip={() => void advance()}
                         />
                       );
                     case "confirmation-card":
@@ -491,12 +574,32 @@ export function ChatThread() {
       <ChatInputBar
         ref={inputRef}
         onSend={(text) => void (claimSubmitted ? sendRelayMessage(text) : advance(text))}
-        onAttach={(fileName) => {
+        onAttach={async (file, fileName) => {
+          if (!routingId) return;
           markConversationStarted();
-          setMessages((prev) => [
-            ...prev,
-            { id: `veteran-attach-${Date.now()}`, type: "veteran-text", text: `Attached: ${fileName}` },
-          ]);
+          setLoading(true);
+          try {
+            const turn = await apiClient.uploadDocument(routingId, file, fileName);
+            setMessages((prev) => appendUnique(prev, turn));
+            // The card path advances the dig; attaching from the composer is
+            // the same act and must too, or the progress rail and the
+            // "Start over" control stay stuck on step one.
+            setStepsDone((n) => Math.max(n, 1));
+          } catch (error) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `attach-failed-${Date.now()}`,
+                type: "ai-text",
+                text:
+                  error instanceof Error && error.message
+                    ? `I couldn't read ${fileName}: ${error.message}`
+                    : `I couldn't read ${fileName}. Please try again.`,
+              },
+            ]);
+          } finally {
+            setLoading(false);
+          }
         }}
         disabled={loading}
       />

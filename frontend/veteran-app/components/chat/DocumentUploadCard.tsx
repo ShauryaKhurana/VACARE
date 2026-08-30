@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AccentButton } from "@/components/shared/AccentButton";
 import { Button } from "@/components/ui/button";
 import { prepareCapturedFile } from "@/lib/documentCapture";
+import { apiClient } from "@/lib/api/client";
+import type { ChatMessage } from "@/lib/api/types";
 import { IconFileUpload, IconAlertTriangle } from "@tabler/icons-react";
 
 type CaptureState = "idle" | "processing" | "uploading" | "parsed" | "parse-failed";
@@ -12,31 +14,44 @@ type CaptureState = "idle" | "processing" | "uploading" | "parsed" | "parse-fail
 /**
  * Implements the capture state machine from Deep Dives Section 2.4:
  * idle -> capturing -> format-check -> (compress | skip) -> uploading ->
- * awaiting-parse -> parsed | parse-failed. There's no real backend, so
- * "uploading"/"awaiting-parse" is a short simulated delay that resolves to
- * a canned result -- but HEIC detection and compression themselves are real.
+ * awaiting-parse -> parsed | parse-failed.
+ *
+ * The upload is real now. It previously waited 900ms and threw the file
+ * away, which meant a veteran could pick their DD-214, see "Got it", and
+ * have nothing reach the server -- the conversation then re-asked for the
+ * same document forever.
  */
 export function DocumentUploadCard({
   prompt,
-  onParsed,
+  routingId,
+  onUploaded,
+  onSkip,
 }: {
   prompt: string;
-  onParsed: () => void;
+  routingId: string;
+  onUploaded: (messages: ChatMessage[]) => void;
+  onSkip: () => void;
 }) {
   const [state, setState] = useState<CaptureState>("idle");
   const [attempts, setAttempts] = useState(0);
+  const [errorText, setErrorText] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setState("processing");
     try {
-      await prepareCapturedFile(file);
+      const prepared = await prepareCapturedFile(file);
       setState("uploading");
-      await new Promise((r) => setTimeout(r, 900));
+      const messages = await apiClient.uploadDocument(routingId, prepared.blob, file.name);
       setState("parsed");
-      onParsed();
-    } catch {
+      onUploaded(messages);
+    } catch (error) {
       setAttempts((a) => a + 1);
+      setErrorText(
+        error instanceof Error && error.message
+          ? error.message
+          : "That file didn't come through clearly.",
+      );
       setState("parse-failed");
     }
   }
@@ -51,10 +66,9 @@ export function DocumentUploadCard({
             <input
               ref={inputRef}
               type="file"
-              accept="image/*"
-              capture="environment"
+              accept="image/*,application/pdf,.pdf,.heic"
               className="sr-only"
-              aria-label="Take or choose a photo of your document"
+              aria-label="Take a photo or choose a file for your document"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleFile(file);
@@ -66,7 +80,7 @@ export function DocumentUploadCard({
               className="w-full"
             >
               <IconFileUpload size={18} aria-hidden="true" />
-              Take or choose a photo
+              Take a photo or choose a file
             </AccentButton>
           </>
         )}
@@ -92,7 +106,7 @@ export function DocumentUploadCard({
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm text-warning">
               <IconAlertTriangle size={16} aria-hidden="true" />
-              That photo didn&apos;t come through clearly. Want to try again?
+              {errorText ?? "That file didn't come through clearly."} Want to try again?
             </div>
             <div className="flex gap-2">
               <Button
@@ -104,7 +118,7 @@ export function DocumentUploadCard({
                   inputRef.current?.click();
                 }}
               >
-                Retake photo
+                Try another file
               </Button>
               {attempts >= 2 && (
                 <Button
@@ -113,7 +127,7 @@ export function DocumentUploadCard({
                   className="rounded-control"
                   onClick={() => {
                     setState("parsed");
-                    onParsed();
+                    onSkip();
                   }}
                 >
                   Enter details manually instead

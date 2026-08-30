@@ -49,21 +49,29 @@ def test_a_chat_turn_returns_only_that_turn(client, monkeypatch):
     body = client.post(f"/api/app/claims/{ROUTING_ID}/chat",
                        json={"text": "My ears ring"}).json()
     texts = [m.get("text") for m in body["messages"]]
-    assert "My ears ring" in texts
+
+    # The caller's own message is not echoed: the client rendered it the
+    # moment it was typed, so returning it drew the bubble twice.
+    assert "My ears ring" not in texts
     assert "Got it." in texts
+
+    # It is still in the transcript, which is what a resume reads.
+    transcript = client.get(f"/api/app/claims/{ROUTING_ID}/messages").json()["messages"]
+    assert any(m.get("text") == "My ears ring" for m in transcript)
 
 
 def test_the_veteran_turn_is_recorded_even_if_the_handler_forgets(client, monkeypatch):
-    """The API must not lose the user's own message to a handler change."""
+    """The transcript must not lose the user's own message to a handler change."""
     from src import intake_chat
 
     monkeypatch.setattr(intake_chat, "apply_answer",
                         lambda session, text: "Got it.")   # deliberately silent
     client.get(f"/api/app/claims/{ROUTING_ID}")
-    body = client.post(f"/api/app/claims/{ROUTING_ID}/chat",
-                       json={"text": "My ears ring"}).json()
+    client.post(f"/api/app/claims/{ROUTING_ID}/chat", json={"text": "My ears ring"})
+
+    transcript = client.get(f"/api/app/claims/{ROUTING_ID}/messages").json()["messages"]
     assert any(m["type"] == "veteran-text" and m["text"] == "My ears ring"
-               for m in body["messages"])
+               for m in transcript)
 
 
 def test_confirm_moves_the_claim_into_vso_review(client):
@@ -124,3 +132,17 @@ def test_an_upload_failure_is_reported_not_swallowed(client, monkeypatch):
                            files={"file": ("dd214.pdf", b"%PDF-", "application/pdf")})
     assert response.status_code == 502
     assert "no API key" in response.json()["detail"]
+
+
+def test_the_veteran_can_download_their_filled_526ez(client):
+    client.get(f"/api/app/claims/{ROUTING_ID}")
+    response = client.get(f"/api/app/claims/{ROUTING_ID}/526ez")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "21-526EZ" in response.headers["content-disposition"]
+    assert response.content[:5] == b"%PDF-"
+
+
+def test_downloading_a_form_for_an_unknown_claim_is_a_404(client):
+    assert client.get("/api/app/claims/route-never-seen/526ez").status_code == 404

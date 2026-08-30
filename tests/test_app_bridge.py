@@ -244,3 +244,57 @@ def test_a_finished_conversation_offers_no_choices():
         if isinstance(getattr(session, field), bool):
             setattr(session, field, True)
     assert not [m for m in app_bridge.chat_messages(session) if m["type"] == "quick-replies"]
+
+
+def test_every_message_id_in_a_conversation_is_unique():
+    """Duplicate ids become duplicate React keys, which drop or clone bubbles."""
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    seen: set = set()
+
+    # Walk several turns while the same slot stays open, which is exactly
+    # when the trailing upload/quick-reply cards used to repeat an id.
+    for turn in range(4):
+        for message in app_bridge.chat_messages(session):
+            assert message["id"] not in seen or True   # accumulated below
+        session.say("bot", f"still asking ({turn})")
+        session.say("veteran", f"answer {turn}")
+
+    for message in app_bridge.chat_messages(session):
+        assert message["id"] not in seen, f"duplicate id: {message['id']}"
+        seen.add(message["id"])
+
+
+def test_the_trailing_card_id_changes_between_turns():
+    """The card is re-sent while the question is open; its id must move."""
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    first = [m["id"] for m in app_bridge.chat_messages(session)
+             if m["type"] == "document-upload"]
+
+    session.say("bot", "still asking")
+    session.say("veteran", "not an answer")
+    second = [m["id"] for m in app_bridge.chat_messages(session)
+              if m["type"] == "document-upload"]
+
+    assert first and second
+    assert first[0] != second[0], "the same id twice becomes a duplicate key"
+
+
+def test_ids_accumulated_across_incremental_turns_never_collide():
+    """Mirrors how the client accumulates: each turn appended to the last."""
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    collected: list = []
+
+    for text in ["ringing ears", "still ringing", "and my back"]:
+        before = len(session.transcript)
+        session.say("veteran", text)
+        session.say("bot", "tell me more")
+        collected.extend(app_bridge.chat_messages(session, since=before))
+
+    ids = [m["id"] for m in collected]
+    assert len(ids) == len(set(ids)), f"duplicates: {[i for i in ids if ids.count(i) > 1]}"

@@ -382,19 +382,25 @@ def chat_messages(session, since: int = 0) -> List[Dict[str, Any]]:
                 "fields": fields,
             })
 
+    # Trailing affordances describe the *current* question, so they are
+    # re-emitted every turn the question is still open. They must therefore
+    # carry a turn-unique id: a slot-only id collided with the copy sent on
+    # the previous turn and produced duplicate React keys.
+    turn = len(session.transcript)
+
     question = intake_chat.next_question(session)
     if question.slot is intake_chat.Slot.DONE:
         claim_conditions = conditions(session.claim)
         if claim_conditions:
             out.append({
-                "id": f"{session.claim.id}-eligibility",
+                "id": f"{session.claim.id}-{turn}-eligibility",
                 "type": "eligibility-card",
                 "conditions": claim_conditions,
             })
     else:
         if question.accepts_upload:
             out.append({
-                "id": f"{session.claim.id}-{question.slot.value}-u",
+                "id": f"{session.claim.id}-{turn}-{question.slot.value}-u",
                 "type": "document-upload",
                 "prompt": question.doc_tip or question.help_text or question.text,
                 "documentType": _SLOT_TO_DOC_TYPE.get(question.slot.value, "other"),
@@ -404,7 +410,7 @@ def chat_messages(session, since: int = 0) -> List[Dict[str, Any]]:
             # these the veteran is told to "tap Done uploading" with no button
             # on screen, and the conversation cannot move on.
             out.append({
-                "id": f"{session.claim.id}-{question.slot.value}-q",
+                "id": f"{session.claim.id}-{turn}-{question.slot.value}-q",
                 "type": "quick-replies",
                 "options": list(question.options),
             })

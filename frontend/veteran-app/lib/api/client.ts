@@ -9,6 +9,11 @@ import { HttpApiClient } from "@/lib/api/http";
 export interface ApiClient {
   getClaim(routingId: RoutingId): Promise<Claim>;
   sendChatMessage(routingId: RoutingId, text: string): Promise<ChatMessage[]>;
+  /** Sends a captured document and returns the turn it produced. */
+  uploadDocument(routingId: RoutingId, file: File | Blob, filename: string): Promise<ChatMessage[]>;
+  /** Where the veteran can download their filled draft 21-526EZ, or null
+   *  when there is no backend to generate one. */
+  formDownloadUrl(routingId: RoutingId): string | null;
   confirmClaimDraft(routingId: RoutingId): Promise<{ vso: VsoInfo }>;
   deleteMyData(routingId: RoutingId): Promise<void>;
 }
@@ -37,6 +42,26 @@ class MockApiClient implements ApiClient {
   async sendChatMessage(routingId: RoutingId, _text: string): Promise<ChatMessage[]> {
     const turn = getNextChatTurn(routingId);
     return delay(turn, MOCK_LATENCY_MS + 300);
+  }
+
+  async uploadDocument(
+    routingId: RoutingId,
+    _file: File | Blob,
+    filename: string,
+  ): Promise<ChatMessage[]> {
+    // No backend to parse it, so acknowledge the file and advance the script.
+    const turn = getNextChatTurn(routingId);
+    return delay(
+      [
+        { id: `upload-${Date.now()}`, type: "veteran-text", text: `[uploaded ${filename}]` },
+        ...turn,
+      ] as ChatMessage[],
+      MOCK_LATENCY_MS + 300,
+    );
+  }
+
+  formDownloadUrl(_routingId: RoutingId): string | null {
+    return null;      // nothing to fill a form from without a backend
   }
 
   async confirmClaimDraft(_routingId: RoutingId): Promise<{ vso: VsoInfo }> {
