@@ -18,6 +18,8 @@ export default function AccessibilityPage() {
   const setHighContrast = useAccessibilityStore((s) => s.setHighContrast);
   const voiceInputDefault = useAccessibilityStore((s) => s.voiceInputDefault);
   const setVoiceInputDefault = useAccessibilityStore((s) => s.setVoiceInputDefault);
+  const readAloud = useAccessibilityStore((s) => s.readAloud);
+  const setReadAloud = useAccessibilityStore((s) => s.setReadAloud);
 
   return (
     <PageContainer>
@@ -77,6 +79,13 @@ export default function AccessibilityPage() {
           description="Start conversations with the microphone on, where supported"
           checked={voiceInputDefault}
           onCheckedChange={setVoiceInputDefault}
+        />
+        <Toggle
+          id="read-aloud"
+          label="Read messages aloud"
+          description="Speak each answer as it arrives, so you can listen instead of read"
+          checked={readAloud}
+          onCheckedChange={setReadAloud}
         />
       </div>
     </PageContainer>

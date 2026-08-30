@@ -1,10 +1,18 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { IconMicrophone, IconMicrophoneOff, IconSend, IconPaperclip } from "@tabler/icons-react";
+import {
+  IconMicrophone,
+  IconMicrophoneOff,
+  IconSend,
+  IconPaperclip,
+  IconVolume,
+  IconVolumeOff,
+} from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
 import { prepareCapturedFile } from "@/lib/documentCapture";
+import { speechSupported, stopSpeaking } from "@/lib/speech";
 
 // Web Speech API isn't in TypeScript's DOM lib yet; a minimal shape covers
 // what this component actually uses.
@@ -65,11 +73,14 @@ export const ChatInputBar = forwardRef<
   const [listening, setListening] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const voiceDefault = useAccessibilityStore((s) => s.voiceInputDefault);
+  const readAloud = useAccessibilityStore((s) => s.readAloud);
+  const setReadAloud = useAccessibilityStore((s) => s.setReadAloud);
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
   const desktopTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [readAloudSupported, setReadAloudSupported] = useState(false);
 
   // Only one of the two textareas below is ever visible (md: swap) -- calling
   // focus() on both is harmless, since a display:none element silently
@@ -87,6 +98,7 @@ export const ChatInputBar = forwardRef<
     // and checking it during render would make the client's first render
     // disagree with the server-rendered markup.
     setVoiceSupported(getSpeechRecognitionCtor() !== null);
+    setReadAloudSupported(speechSupported());
   }, []);
 
   function submit() {
@@ -133,6 +145,36 @@ export const ChatInputBar = forwardRef<
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
+
+  function toggleReadAloud() {
+    // Turning it off has to silence what is already being spoken, not just
+    // stop the next message -- otherwise the veteran taps mute and the
+    // assistant keeps talking for another paragraph.
+    if (readAloud) stopSpeaking();
+    setReadAloud(!readAloud);
+  }
+
+  const readAloudButton = readAloudSupported && (
+    <button
+      type="button"
+      onClick={toggleReadAloud}
+      aria-pressed={readAloud}
+      aria-label={readAloud ? "Turn off reading messages aloud" : "Read messages aloud"}
+      title={readAloud ? "Reading messages aloud" : "Read messages aloud"}
+      className={cn(
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
+        readAloud
+          ? "border-accent bg-accent-tint text-accent"
+          : "border-border bg-background text-text-secondary",
+      )}
+    >
+      {readAloud ? (
+        <IconVolume size={20} aria-hidden="true" />
+      ) : (
+        <IconVolumeOff size={20} aria-hidden="true" />
+      )}
+    </button>
+  );
 
   const micButton = voiceSupported && (
     <button
@@ -202,6 +244,7 @@ export const ChatInputBar = forwardRef<
           rows={1}
           className="min-h-11 flex-1 resize-none rounded-full border border-border bg-background px-4 py-2.5 text-base text-text-primary outline-none focus-visible:border-accent"
         />
+        {readAloudButton}
         {micButton}
         <button
           type="submit"
@@ -253,6 +296,7 @@ export const ChatInputBar = forwardRef<
               <IconPaperclip size={20} aria-hidden="true" />
             </button>
             <div className="flex items-center gap-2">
+              {readAloudButton}
               {micButton}
               <button
                 type="submit"
