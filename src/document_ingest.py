@@ -25,6 +25,8 @@ DOC_TO_EVIDENCE = {
     "medical_record": EvidenceType.CURRENT_MEDICAL_RECORD,
     "nexus_letter": EvidenceType.NEXUS_LETTER,
     "buddy_statement": EvidenceType.BUDDY_STATEMENT,
+    "audiology_report": EvidenceType.HEARING_TEST,
+    "separation_orders": EvidenceType.SERVICE_PERSONNEL_RECORD,
 }
 
 # Re-use successful parses when the same file bytes are uploaded again (saves API quota).
@@ -154,6 +156,17 @@ def ingest_document(
     if applied:
         result.fields_applied = applied
 
+    if doc_type == "separation_orders" and payload.get("still_serving"):
+        # Separation orders are how a Lane 1 (BDD) claim gets dated: the member
+        # has no DD-214 yet, and the projected separation date drives the
+        # 180-90 day window. That date is in the future, hence allow_future.
+        claim.context.still_serving = True
+        separation = extract.parse_date(payload.get("service_end"), allow_future=True)
+        if separation:
+            claim.context.separation_date = separation
+            claim.veteran.service_end = None
+            result.fields_applied = list(result.fields_applied) + ["separation date"]
+
     if doc_type == "decision_letter":
         from src import decision as decision_helpers
 
@@ -196,6 +209,10 @@ def _merge_veteran(claim: Claim, fields: Dict[str, Any]) -> List[str]:
         veteran.first_name = fields["first_name"]
         if fields.get("last_name"):
             veteran.last_name = fields["last_name"]
+        # DD-214 block 1 is "LAST, FIRST MIDDLE", so a middle name arrives glued
+        # to the first name; the 526EZ has its own middle-initial box.
+        if fields.get("middle_name"):
+            veteran.middle_name = fields["middle_name"]
         applied.append("name")
     elif fields.get("last_name") and veteran.last_name in {"Case", "Veteran"}:
         veteran.last_name = fields["last_name"]

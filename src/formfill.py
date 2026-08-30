@@ -98,6 +98,8 @@ def build_field_values(claim: Claim) -> Dict[str, str]:
 
     values[f"{HEADER}Veteran_Service_Member_First_Name[0]"] = veteran.first_name
     values[f"{HEADER}Veteran_Service_Member_Last_Name[0]"] = veteran.last_name
+    if veteran.middle_name:
+        values[f"{HEADER}Veteran_Service_Member_Middle_Initial[0]"] = veteran.middle_name[0]
 
     dob = _split_date(veteran.dob)
     values[f"{HEADER}Date_Of_Birth_Month[0]"] = dob["month"]

@@ -46,12 +46,8 @@ def _parse_message_timestamp(raw: str) -> datetime:
     return datetime.fromisoformat(f"{raw}T00:00:00")
 
 
-def _store_dob(value: Optional[date]) -> str:
-    """SQLite requires a value; use a sentinel when intake has not collected DOB yet."""
-    return value.isoformat() if value else "0000-01-01"
-
-
 def _load_dob(value: Optional[str]) -> Optional[date]:
+    """The column is nullable now, but rows written before that hold a sentinel."""
     if not value or value == "0000-01-01":
         return None
     return date.fromisoformat(value)
@@ -73,10 +69,61 @@ class ClaimStore:
         self.connection.commit()
 
     def _add_missing_columns(self) -> None:
-        """Tiny forward migration so databases created by an older build still open."""
+        """Tiny forward migrations so databases created by an older build still open."""
         existing = {row["name"] for row in self.connection.execute("PRAGMA table_info(claims)")}
         if "context_json" not in existing:
             self.connection.execute("ALTER TABLE claims ADD COLUMN context_json TEXT")
+        veteran_columns = {row["name"] for row in
+                           self.connection.execute("PRAGMA table_info(veterans)")}
+        if veteran_columns and "middle_name" not in veteran_columns:
+            self.connection.execute("ALTER TABLE veterans ADD COLUMN middle_name TEXT")
+        self._relax_veteran_dob()
+        self._add_missing_tables()
+
+    def _relax_veteran_dob(self) -> None:
+        """Drop the old NOT NULL on veterans.dob.
+
+        Date of birth became optional when intake moved to a conversation: a
+        draft claim can exist before the veteran has given one. SQLite cannot
+        alter a constraint in place, so the table is rebuilt when the old
+        constraint is still present.
+        """
+        columns = list(self.connection.execute("PRAGMA table_info(veterans)"))
+        if not columns:
+            return
+        dob = next((row for row in columns if row["name"] == "dob"), None)
+        if dob is None or not dob["notnull"]:
+            return
+
+        names = ", ".join(row["name"] for row in columns)
+        # legacy_alter_table keeps SQLite from rewriting other tables' foreign
+        # keys to point at the renamed table, which would leave claims
+        # referencing veterans_old after the drop.
+        self.connection.executescript(f"""
+            PRAGMA foreign_keys = OFF;
+            PRAGMA legacy_alter_table = ON;
+            ALTER TABLE veterans RENAME TO veterans_old;
+            CREATE TABLE veterans (
+                id TEXT PRIMARY KEY,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                middle_name TEXT,
+                dob TEXT,
+                email TEXT,
+                phone TEXT,
+                branch TEXT,
+                service_start TEXT,
+                service_end TEXT,
+                discharge_type TEXT NOT NULL DEFAULT 'unknown'
+            );
+            INSERT INTO veterans ({names}) SELECT {names} FROM veterans_old;
+            DROP TABLE veterans_old;
+            PRAGMA legacy_alter_table = OFF;
+            PRAGMA foreign_keys = ON;
+        """)
+
+    def _add_missing_tables(self) -> None:
+        """Tables added by the API layer: submissions, messages, saved chats."""
         tables = {
             row["name"]
             for row in self.connection.execute(
@@ -143,17 +190,19 @@ class ClaimStore:
 
         cur.execute(
             """
-            INSERT INTO veterans (id, first_name, last_name, dob, email, phone,
+            INSERT INTO veterans (id, first_name, last_name, middle_name, dob, email, phone,
                                   branch, service_start, service_end, discharge_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 first_name=excluded.first_name, last_name=excluded.last_name,
+                middle_name=excluded.middle_name,
                 dob=excluded.dob, email=excluded.email, phone=excluded.phone,
                 branch=excluded.branch, service_start=excluded.service_start,
                 service_end=excluded.service_end, discharge_type=excluded.discharge_type
             """,
             (
-                veteran.id, veteran.first_name, veteran.last_name, _store_dob(veteran.dob),
+                veteran.id, veteran.first_name, veteran.last_name, veteran.middle_name,
+                _iso(veteran.dob),
                 veteran.email, veteran.phone,
                 veteran.branch.value if veteran.branch else None,
                 _iso(veteran.service_start), _iso(veteran.service_end),

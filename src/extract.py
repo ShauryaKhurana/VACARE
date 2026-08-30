@@ -64,8 +64,9 @@ DOCUMENT_SCHEMA = {
     "properties": {
         "document_type": {
             "type": "string",
-            "enum": ["dd214", "service_treatment_record", "medical_record",
-                     "decision_letter", "nexus_letter", "buddy_statement", "other"],
+            "enum": ["dd214", "separation_orders", "service_treatment_record",
+                     "medical_record", "audiology_report", "decision_letter",
+                     "nexus_letter", "buddy_statement", "other"],
         },
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         "summary": {"type": "string", "description": "One line: what this document is"},
@@ -85,6 +86,10 @@ DOCUMENT_SCHEMA = {
                      "dishonorable", "uncharacterized", "unknown"],
         },
         "decision_date": {"type": "string", "description": "For a decision letter: YYYY-MM-DD or empty"},
+        "still_serving": {
+            "type": "boolean",
+            "description": "True only for separation orders: the member has not separated yet",
+        },
         "outcome": {
             "type": "string",
             "enum": ["granted", "partial", "denied", "increased", "decreased",
@@ -146,8 +151,14 @@ SYSTEM = (
 # --- helpers ---------------------------------------------------------------
 
 
-def parse_date(value: Any) -> Optional[date]:
-    """Model dates arrive as strings and are frequently empty or partial."""
+def parse_date(value: Any, allow_future: bool = False) -> Optional[date]:
+    """Model dates arrive as strings and are frequently empty or partial.
+
+    Future dates are rejected by default, because a birth date, an onset date,
+    or a decision date in the future means the model misread something. Pass
+    allow_future=True for a projected separation date, which is the one date
+    here that is legitimately ahead of today.
+    """
     if not value or not isinstance(value, str):
         return None
     text = value.strip()
@@ -155,7 +166,9 @@ def parse_date(value: Any) -> Optional[date]:
         try:
             from datetime import datetime
             parsed = datetime.strptime(text, fmt).date()
-            return parsed if parsed <= date.today() else None
+            if parsed > date.today() and not allow_future:
+                return None
+            return parsed
         except ValueError:
             continue
     return None
@@ -241,11 +254,18 @@ def extract_from_document(attachment: Attachment) -> Dict[str, Any]:
         "(date of birth), block 12a (date entered active duty), block 12b (separation "
         "date), block 24 (character of service). VA prints dates as 'YYYY MM DD' - "
         "convert them to YYYY-MM-DD.\n"
-        "If it is a medical record, list the diagnosed conditions, when they began, whether "
-        "treatment is ongoing, and the treating providers.\n"
+        "If it is a medical record, list the diagnosed conditions, whether treatment is "
+        "ongoing, and the treating providers. For onset_date, use any phrase that dates the "
+        "condition - 'since 2011', 'present since the 2012 deployment', 'onset following' - "
+        "and give the first of that year or month when only a year or month is stated. "
+        "Leave onset_date empty only when the record truly says nothing about when it began.\n"
         "If it is a VA decision letter, read the decision date, overall outcome "
         "(granted, partial, denied, increased, etc.), combined rating if shown, "
-        "and which conditions were granted vs denied.\n\n"
+        "and which conditions were granted vs denied.\n"
+        "If it is separation orders or a pre-separation notice, the member is still serving: "
+        "set still_serving true and put the projected separation date in service_end.\n"
+        "If it is an audiogram or audiology report, classify it as audiology_report and list "
+        "the hearing conditions it documents.\n\n"
         "Leave any field empty if the document does not clearly show it."
     )
     payload = gemini.generate_json(
@@ -301,6 +321,14 @@ def veteran_fields_from(payload: Dict[str, Any]) -> Dict[str, Any]:
         value = _clean(payload.get(key))
         if value:
             fields[key] = normalize_name(value)
+
+    # DD-214 block 1 is "LAST, FIRST MIDDLE", so a middle name often arrives
+    # glued to the first name. The 526EZ has its own middle-initial box.
+    first = fields.get("first_name")
+    if first and " " in first:
+        head, _, tail = first.partition(" ")
+        fields["first_name"] = head
+        fields["middle_name"] = tail.strip()
 
     dob = parse_date(payload.get("date_of_birth"))
     if dob:

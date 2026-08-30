@@ -135,7 +135,17 @@ python -m pytest tests -q
 
 ## Not built yet
 
-The 526EZ is filled but not signed; SSN and mailing address boxes are deliberately
-left blank. Chat sessions live in memory, so restarting the server loses an unfinished
-conversation. Still missing: POA revocation checks, chase states for third-party
-forms, DBQ selection by diagnostic code, form revision monitoring, and multi-user auth.
+The 526EZ is filled but neither signed nor submitted, and the SSN and mailing
+address boxes are deliberately left blank rather than invented. Deadline maths is
+plain calendar arithmetic - no tolling, no weekend or holiday rules - so a date
+that matters legally still needs a human check. Most form PDF links are derived
+from a URL pattern rather than individually verified. Still missing: POA
+revocation checks, chase states for third-party forms, DBQ selection by
+diagnostic code, form revision monitoring, and multi-user auth.
+
+## Frontend
+
+`frontend/veteran-app/` is a Next.js frontend for the veteran-facing conversational intake
+flow described in the hackathon design docs. It currently runs against an in-repo mock API
+layer, not this Python backend - see `frontend/veteran-app/README.md` for setup and
+architecture.

@@ -116,6 +116,7 @@ class Veteran(BaseModel):
     id: str = Field(default_factory=new_id)
     first_name: str
     last_name: str
+    middle_name: Optional[str] = None
     # Optional so a conversational intake can build a veteran progressively;
     # the CLI and web form still require it up front.
     dob: Optional[date] = None
