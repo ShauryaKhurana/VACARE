@@ -10,18 +10,21 @@ Every page reads and writes claims through the same service layer as /api.
 
 from __future__ import annotations
 
+import os
 import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from src import evidence_rules, gemini, intake_chat, lanes, packet as packet_view
 from src.api import service, ui_bridge
+from src.api.app_routes import router as app_router
 from src.api.routes import router as api_router
 from src import collaboration
 from src import lifecycle as lifecycle_helpers
@@ -46,6 +49,25 @@ from src.va.client import VaClientError
 
 app = FastAPI(title="VACARE")
 app.include_router(api_router, prefix="/api")
+app.include_router(app_router, prefix="/api")
+
+# The Next.js frontend runs on its own dev server, so it is a cross-origin
+# caller. Origins are configurable for deployment; the defaults cover
+# `npm run dev`.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        origin.strip()
+        for origin in os.environ.get(
+            "VACARE_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if origin.strip()
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["msg_veteran"] = collaboration.message_text_for_veteran
 templates.env.filters["msg_vso"] = collaboration.message_text_for_vso
