@@ -66,7 +66,10 @@ def build_pdf() -> FPDF:
     pdf.cell(90, 6, "ARMY / ACTIVE DUTY / USA")
     pdf.set_xy(107, y + 2)
     pdf.set_font("Courier", "", 9)
-    pdf.cell(90, 6, "XXX-XX-4321")
+    # A real DD-214 prints the full SSN in block 3. The redacted "XXX-XX-4321"
+    # this used to carry meant the intake could never read it and had to ask
+    # the veteran to type a number the document was already showing.
+    pdf.cell(90, 6, "000-00-0000")
     pdf.set_y(y + 12)
 
     pdf.set_font("Helvetica", "", 8)
@@ -81,8 +84,11 @@ def build_pdf() -> FPDF:
         pdf.cell(w - 4, 6, val)
     pdf.set_y(y + 12)
 
-    pdf.field_box("7a", "DATE OF SEPARATION OR TRANSFER TO RESERVE (YYYYMMDD)", "20130830", h=10)
-    pdf.field_box("7b", "TYPE OF SEPARATION", "DISCHARGE", h=10)
+    # 7a/7b carry their real DD-214 meanings. They previously held the
+    # separation date and type, which block 12b and block 24 already carry --
+    # so home of record, the one address on the form, appeared nowhere.
+    pdf.field_box("7a", "PLACE OF ENTRY INTO ACTIVE DUTY", "PHOENIX, AZ", h=10)
+    pdf.field_box("7b", "HOME OF RECORD AT TIME OF ENTRY", "3114 ELM STREET, TUCSON, AZ 85701", h=10)
 
     pdf.set_font("Helvetica", "B", 8)
     pdf.cell(0, 5, "PERIOD(S) OF SERVICE", new_x="LMARGIN", new_y="NEXT")

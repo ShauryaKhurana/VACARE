@@ -142,6 +142,7 @@ def send_chat_message(routing_id: str, body: ChatRequest) -> Dict[str, Any]:
         question = intake_chat.next_question(session)
         if question.slot is not intake_chat.Slot.DONE:
             _say_once(session, question.text)
+        _close_if_done(session)
         _persist(session)
         return {"messages": app_bridge.chat_messages(session, since=before)}
 
@@ -159,6 +160,7 @@ def send_chat_message(routing_id: str, body: ChatRequest) -> Dict[str, Any]:
     question = intake_chat.next_question(session)
     if question.slot is not intake_chat.Slot.DONE:
         _say_once(session, question.text)
+    _close_if_done(session)
 
     _persist(session)
     # Drop the echo of what the caller just sent: clients render their own
@@ -193,6 +195,7 @@ async def upload_document(routing_id: str, file: UploadFile = File(...)) -> Dict
     question = intake_chat.next_question(session)
     if question.slot is not intake_chat.Slot.DONE:
         _say_once(session, question.text)
+    _close_if_done(session)
 
     _persist(session)
     return {
@@ -273,6 +276,26 @@ def _ensure_veteran_turn(session, text: str, before: int) -> None:
         session.transcript.insert(
             before, intake_chat.Message(role="veteran", text=text.strip())
         )
+
+
+# The client watches for this phrase to know the dig is over and to offer
+# the handoff to Review & confirm. It used to infer that from the shape of a
+# turn - "all text, no card" - which the real conversation breaks: the last
+# turn carries the eligibility card, so the handoff never appeared and the
+# claim could never be sent.
+REVIEW_HANDOFF = (
+    "That's everything I need. Review & confirm what we have, "
+    "then it goes to your VSO."
+)
+
+
+def _close_if_done(session) -> None:
+    """Say the closing line once the conversation has nothing left to ask."""
+    if intake_chat.next_question(session).slot is not intake_chat.Slot.DONE:
+        return
+    if any(REVIEW_HANDOFF in message.text for message in session.transcript):
+        return
+    session.say("bot", REVIEW_HANDOFF)
 
 
 def _say_once(session, text: str) -> None:

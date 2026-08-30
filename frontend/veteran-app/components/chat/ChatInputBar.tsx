@@ -170,7 +170,9 @@ export const ChatInputBar = forwardRef<
         className="sr-only"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void handleFileSelected(file);
+          // Ignore an attach while a turn is in flight: both requests would
+          // load the same session and the later save would win.
+          if (file && !disabled) void handleFileSelected(file);
         }}
       />
 

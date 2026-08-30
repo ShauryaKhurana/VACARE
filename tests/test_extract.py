@@ -33,6 +33,9 @@ DD214_PAYLOAD = {
     "first_name": "DANA", "last_name": "REYES", "date_of_birth": "1988-03-12",
     "branch": "army", "service_start": "2007-06-01", "service_end": "2013-08-30",
     "discharge_type": "honorable",
+    # Blocks 3 and 7b. This payload also seeds the offline parse cache, so
+    # leaving them out made a cached DD-214 look like it had neither.
+    "ssn": "000-00-0000", "home_of_record": "3114 ELM STREET, TUCSON, AZ 85701",
 }
 
 MEDICAL_RECORD_PAYLOAD = {

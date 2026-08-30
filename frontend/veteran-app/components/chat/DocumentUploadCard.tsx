@@ -26,11 +26,15 @@ export function DocumentUploadCard({
   routingId,
   onUploaded,
   onSkip,
+  busy = false,
 }: {
   prompt: string;
   routingId: string;
   onUploaded: (messages: ChatMessage[]) => void;
   onSkip: () => void;
+  /** True while a turn is already in flight. Uploading on top of one made
+   *  both requests load the same session and the later save win. */
+  busy?: boolean;
 }) {
   const [state, setState] = useState<CaptureState>("idle");
   const [attempts, setAttempts] = useState(0);
@@ -76,6 +80,7 @@ export function DocumentUploadCard({
             />
             <AccentButton
               type="button"
+              disabled={busy}
               onClick={() => inputRef.current?.click()}
               className="w-full"
             >
