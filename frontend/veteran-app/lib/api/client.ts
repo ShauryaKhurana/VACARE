@@ -4,6 +4,7 @@ import {
   fixturesByRoutingId,
 } from "@/lib/api/mock/fixtures";
 import { getNextChatTurn, resetChatScript, chatMessagesKey } from "@/lib/api/mock/chatScript";
+import { HttpApiClient } from "@/lib/api/http";
 
 export interface ApiClient {
   getClaim(routingId: RoutingId): Promise<Claim>;
@@ -56,7 +57,15 @@ class MockApiClient implements ApiClient {
   }
 }
 
-// A real implementation would live alongside this one and be selected here
-// based on MOCK_MODE, per LLD Section 6.2. There's no real backend yet, so
-// mock is the only implementation for now.
-export const apiClient: ApiClient = new MockApiClient();
+// Which implementation the app uses is decided here and nowhere else, per LLD
+// Section 6.2. Set NEXT_PUBLIC_API_BASE_URL to the Python service (e.g.
+// http://127.0.0.1:8000) to run against the real backend; leave it unset and
+// the app keeps running on mock fixtures, so the UI still works offline and
+// the tests stay hermetic.
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+
+export const usingMockApi = !apiBaseUrl;
+
+export const apiClient: ApiClient = apiBaseUrl
+  ? new HttpApiClient(apiBaseUrl)
+  : new MockApiClient();

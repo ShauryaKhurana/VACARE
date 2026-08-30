@@ -6,6 +6,42 @@ This app is the veteran-facing surface described in the hackathon HLD/LLD; the P
 project at the repo root (`/`) is the claim-prep backend and is not yet wired to this frontend —
 see [Mock API layer](#mock-api-layer-no-backend-yet) below.
 
+## Connecting to the Python backend
+
+By default the app runs on mock fixtures, so `npm run dev` works with nothing
+else running. To use the real backend instead:
+
+```bash
+cp .env.local.example .env.local        # sets NEXT_PUBLIC_API_BASE_URL
+cd ../.. && python -m src.web           # the Python service on :8000
+cd frontend/veteran-app && npm run dev  # the app on :3000
+```
+
+`lib/api/client.ts` picks the implementation from `NEXT_PUBLIC_API_BASE_URL`:
+set, it uses `HttpApiClient` (`lib/api/http.ts`); unset, `MockApiClient`. No
+component knows the difference - that was the point of the interface.
+
+The backend serves the contract in `lib/api/types.ts` from
+`src/api/app_routes.py`, mapped by `src/api/app_bridge.py`:
+
+| ApiClient method | Endpoint |
+| --- | --- |
+| `getClaim` | `GET /api/app/claims/{routingId}` |
+| `sendChatMessage` | `POST /api/app/claims/{routingId}/chat` |
+| `confirmClaimDraft` | `POST /api/app/claims/{routingId}/confirm` |
+| `deleteMyData` | `DELETE /api/app/claims/{routingId}` |
+| *(extra)* `uploadDocument` | `POST /api/app/claims/{routingId}/documents` |
+| *(extra)* `getMessages` | `GET /api/app/claims/{routingId}/messages` |
+
+The routing id is minted here, client-side, and the backend creates a claim the
+first time it sees one - there is no registration step. CORS allows
+`localhost:3000` by default; override with `VACARE_CORS_ORIGINS` on the server.
+
+Two fields are deliberately empty until real data exists: `vso` is blank until
+an accredited representative is actually on the case, and `decision.monthlyAmount`
+is `0` because VA's compensation rate table is not bundled - the UI already
+hides the dollar line when it is zero.
+
 ## Quick start
 
 ```bash

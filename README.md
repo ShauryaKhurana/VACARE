@@ -145,7 +145,16 @@ diagnostic code, form revision monitoring, and multi-user auth.
 
 ## Frontend
 
-`frontend/veteran-app/` is a Next.js frontend for the veteran-facing conversational intake
-flow described in the hackathon design docs. It currently runs against an in-repo mock API
-layer, not this Python backend - see `frontend/veteran-app/README.md` for setup and
-architecture.
+`frontend/veteran-app/` is a Next.js frontend for the veteran-facing conversational
+intake flow. It runs against mock fixtures by default, and against this Python
+backend when `NEXT_PUBLIC_API_BASE_URL` is set:
+
+```bash
+python -m src.web                                    # backend on :8000
+cd frontend/veteran-app && cp .env.local.example .env.local && npm run dev
+```
+
+`src/api/app_routes.py` serves the frontend's own contract
+(`frontend/veteran-app/lib/api/types.ts`), with `src/api/app_bridge.py` mapping
+lanes, the evidence checklist, deadline clocks, and the decision summary onto
+the shapes the UI already renders. See `frontend/veteran-app/README.md`.
