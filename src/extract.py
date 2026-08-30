@@ -122,10 +122,12 @@ DOCUMENT_SCHEMA = {
         "providers": {"type": "array", "items": {"type": "string"},
                       "description": "Treating doctors, clinics, or hospitals named"},
     },
-    # Identity fields are required so the model must emit them (empty string
-    # when genuinely absent) instead of silently omitting them on some runs.
+    # Required so the model must emit them - empty string or empty array when
+    # genuinely absent - rather than silently omitting them on some runs.
+    # "conditions" belongs here: it went missing intermittently, which read as
+    # a document with nothing wrong in it.
     "required": ["document_type", "confidence", "summary", "first_name", "last_name",
-                 "date_of_birth", "service_start", "service_end"],
+                 "date_of_birth", "service_start", "service_end", "conditions"],
 }
 
 # Story + document in one Gemini call (chat sends both on the first turn).

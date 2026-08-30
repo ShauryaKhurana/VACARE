@@ -241,15 +241,14 @@ export function ChatThread() {
     setLoading(true);
     const turn = await apiClient.sendChatMessage(routingId, veteranText ?? "");
     setMessages((prev) => appendUnique(prev, turn));
-    setTurnCount((count) => {
-      const next = count + 1;
-      // The opening greeting (turn 1) is also all-ai-text with no card --
-      // only a *later* all-text turn signals the scripted dig has ended.
-      if (next > 1 && turn.length > 0 && turn.every((m) => m.type === "ai-text")) {
-        setDigComplete(true);
-      }
-      return next;
-    });
+    // The server says when it has nothing left to ask. This used to be
+    // inferred from a turn being "all text, no card", which the real
+    // conversation breaks: its last turn carries the eligibility card, so the
+    // handoff to Review never appeared and the claim could not be sent.
+    if (turn.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
+      setDigComplete(true);
+    }
+    setTurnCount((count) => count + 1);
     setLoading(false);
   }
 
@@ -448,6 +447,7 @@ export function ChatThread() {
                           key={message.id}
                           prompt={message.prompt}
                           routingId={routingId ?? ""}
+                          busy={loading}
                           onUploaded={(turn) => {
                             markConversationStarted();
                             setMessages((prev) => appendUnique(prev, turn));
