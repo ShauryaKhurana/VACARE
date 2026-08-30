@@ -11,6 +11,7 @@ import pytest
 
 from src import extract, gemini, intake_chat
 from src.gemini import Attachment, GeminiError
+from src.models import ClaimStatus
 
 STORY_PAYLOAD = {
     "conditions": [
@@ -32,6 +33,86 @@ DD214_PAYLOAD = {
     "first_name": "DANA", "last_name": "REYES", "date_of_birth": "1988-03-12",
     "branch": "army", "service_start": "2007-06-01", "service_end": "2013-08-30",
     "discharge_type": "honorable",
+}
+
+MEDICAL_RECORD_PAYLOAD = {
+    "document_type": "medical_record",
+    "confidence": "high",
+    "summary": "VA Durham progress note for Dana Reyes",
+    "first_name": "DANA",
+    "last_name": "REYES",
+    "date_of_birth": "1988-03-12",
+    "conditions": [
+        {
+            "name": "Tinnitus",
+            "current_symptoms": "Constant ringing in both ears, worse in quiet rooms",
+            "diagnosis": "H93.19 Tinnitus, bilateral, subjective",
+            "onset_date": "2011-04-01",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": True,
+        },
+        {
+            "name": "Sensorineural hearing loss",
+            "current_symptoms": "Hearing difficulty in both ears",
+            "diagnosis": "H90.3 Sensorineural hearing loss, bilateral",
+            "onset_date": "2011-04-01",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": True,
+        },
+        {
+            "name": "Low back pain",
+            "current_symptoms": "Chronic lumbar pain worsened by prolonged standing",
+            "diagnosis": "M54.50 Low back pain, unspecified",
+            "onset_date": "2007-06-01",
+            "started_in_service": True,
+            "worsened_in_service": True,
+            "currently_treated": True,
+        },
+    ],
+    "providers": [
+        "Dr. Elena Morales, MD - Primary Care, VA Durham",
+        "Dr. James Okonkwo, AuD - Audiology, VA Durham",
+        "Sarah Chen, DPT - Physical Therapy, VA Durham",
+    ],
+}
+
+SERVICE_TREATMENT_RECORD_PAYLOAD = {
+    "document_type": "service_treatment_record",
+    "confidence": "high",
+    "summary": "In-theater field medical encounter after IED blast, Kandahar 2011",
+    "first_name": "DANA",
+    "last_name": "REYES",
+    "date_of_birth": "1988-03-12",
+    "conditions": [
+        {
+            "name": "Tinnitus",
+            "current_symptoms": "Bilateral ear ringing after blast exposure",
+            "diagnosis": "Acoustic trauma / tinnitus, bilateral",
+            "onset_date": "2011-04-09",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": False,
+        },
+        {
+            "name": "Low back pain",
+            "current_symptoms": "Lumbar pain after vehicle impact",
+            "diagnosis": "Lumbar strain without radiculopathy",
+            "onset_date": "2011-04-09",
+            "started_in_service": True,
+            "worsened_in_service": True,
+            "currently_treated": False,
+        },
+    ],
+    "event": {
+        "title": "IED blast on mounted patrol",
+        "description": "Vehicle struck by roadside device in Kandahar Province.",
+        "event_date": "2011-04-09",
+        "location": "Kandahar, Afghanistan",
+        "witnesses": "SGT M. Alvarez",
+        "documented_in_service_records": True,
+    },
 }
 
 
@@ -134,9 +215,11 @@ def test_dd214_upload_fills_identity_so_it_is_never_asked(session):
     assert veteran.dob == date(1988, 3, 12)
     assert veteran.service_end == date(2013, 8, 30)
     assert veteran.discharge_type.value == "honorable"
-    assert "Filled in" in receipt
-    # And the identity questions are now skipped entirely.
-    assert intake_chat.next_question(session).slot == intake_chat.Slot.RATING
+    assert "Thank you for uploading your DD-214" in receipt.message
+    assert "Dana Reyes" in receipt.detail
+    assert "Army" in receipt.detail or "army" in receipt.detail.lower()
+    # Identity is filled — next is contact info.
+    assert intake_chat.next_question(session).slot == intake_chat.Slot.CONTACT
 
 
 def test_uploaded_document_is_recorded_as_evidence(session):
@@ -155,18 +238,21 @@ def test_decision_letter_sets_the_date_and_the_lane(session):
          patch.object(gemini, "available", return_value=True):
         intake_chat.apply_document(session, Attachment("decision.pdf", b"%PDF-"))
     assert session.claim.context.decision_date == date(2026, 6, 1)
-    assert session.claim.context.disagrees_with_decision
+    assert session.claim.status == ClaimStatus.DECIDED
 
 
 def established_identity(session):
     """Fast-forward past the story and identity slots."""
     session.story_done = True
     session.identity_done = True
+    session.contact_done = True
     veteran = session.claim.veteran
     veteran.first_name, veteran.last_name = "Dana", "Reyes"
     veteran.dob = date(1988, 3, 12)
     veteran.service_start = date(2007, 6, 1)
     veteran.service_end = date(2013, 8, 30)
+    veteran.phone = "555-014-2277"
+    veteran.email = "dana@example.com"
     return session
 
 

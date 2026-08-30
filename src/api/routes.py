@@ -12,20 +12,46 @@ from pydantic import ValidationError
 
 from src.api import deps, service
 from src.api.schemas import (
+    CaseMessageResponse,
     CaseSummaryResponse,
+    CaseLiveResponse,
     ChecklistResponse,
     CreateCaseRequest,
     DocumentUploadResponse,
     IntakePayload,
+    ItfRecordRequest,
+    ItfStatusResponse,
+    InboxLiveItemResponse,
+    LiveMessageResponse,
+    LiveEvidenceResponse,
     PathSchemaResponse,
+    PoaRecordRequest,
+    PoaStatusResponse,
+    PostMessageRequest,
     ReviewDecisionRequest,
     ReviewPayloadResponse,
+    TrackerResponse,
+    TrackerStepResponse,
+    TrackerDeadlineResponse,
+    DecisionSummaryResponse,
+    AppealDoorResponse,
+    DecisionDateRequest,
+    AppealStatusResponse,
+    AppealSelectRequest,
+    AppealPickerOptionResponse,
+    AppealCheckItemResponse,
     VaIntakeStatusResponse,
     VaIntakeSubmitResponse,
     VaSubmissionResponse,
+    VsoApproveBody,
+    VsoQueueItemResponse,
+    VsoRequestInfoBody,
 )
-from src import packet as packet_view
+from src import collaboration, itf as itf_helpers, poa as poa_helpers, packet as packet_view
+from src import decision as decision_helpers
+from src import appeal as appeal_helpers
 from src.document_ingest import ingest_document
+from src.models import ClaimStatus, MessageAuthor
 from src.formfill import fill_526ez
 from src.va import VaClientError, get_va_client
 
@@ -136,6 +162,7 @@ async def upload_document(case_id: str, file: UploadFile = File(...)) -> Documen
         except Exception as error:
             raise HTTPException(status_code=500, detail=str(error)) from error
 
+        collaboration.record_document_sent(db, claim, filename)
         service.save_claim(db, claim)
         checklist = service.build_checklist(claim)
 
@@ -183,6 +210,9 @@ def submit_va_intake(case_id: str) -> VaIntakeSubmitResponse:
             submission_id=result.submission_id,
             status=result.status,
             message=result.message,
+        )
+        decision_helpers.mark_submitted(
+            claim, note=f"526EZ submitted ({result.submission_id}).",
         )
         service.save_claim(db, claim)
 
@@ -245,3 +275,409 @@ def get_va_intake_status(case_id: str, submission_id: str) -> VaIntakeStatusResp
         updated_at=status.updated_at,
         detail=status.detail,
     )
+
+
+# ---------------------------------------------------------------------------
+# Veteran ↔ VSO collaboration (shared by ports 8000 and 8001)
+# ---------------------------------------------------------------------------
+
+
+def _message_response(message) -> CaseMessageResponse:
+    return CaseMessageResponse(
+        id=message.id,
+        claim_id=message.claim_id,
+        author=message.author.value,
+        body=message.body,
+        created_at=message.created_at,
+    )
+
+
+@router.get("/vso/queue", response_model=List[VsoQueueItemResponse])
+def vso_queue() -> List[VsoQueueItemResponse]:
+    with deps.store() as db:
+        rows = db.list_vso_queue()
+    return [
+        VsoQueueItemResponse(
+            claim_id=row[0],
+            veteran_name=row[1],
+            status=row[2],
+            created_on=row[3],
+            conditions=row[4],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/cases/{case_id}/messages", response_model=List[CaseMessageResponse])
+def get_case_messages(case_id: str) -> List[CaseMessageResponse]:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        messages = collaboration.list_messages(db, case_id)
+    return [_message_response(m) for m in messages]
+
+
+@router.post("/cases/{case_id}/messages", response_model=CaseMessageResponse, status_code=201)
+def post_case_message(case_id: str, body: PostMessageRequest) -> CaseMessageResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        try:
+            author = MessageAuthor(body.author)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid author") from error
+        if not body.body.strip():
+            raise HTTPException(status_code=422, detail="Message cannot be empty")
+        message = collaboration.post_message(db, claim, author=author, body=body.body)
+    return _message_response(message)
+
+
+@router.post("/cases/{case_id}/vso/submit", response_model=CaseSummaryResponse)
+def submit_case_to_vso(case_id: str) -> CaseSummaryResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        claim = collaboration.submit_for_vso_review(db, claim)
+    return service.case_summary(claim)
+
+
+@router.post("/cases/{case_id}/vso/request-info", response_model=CaseMessageResponse)
+def vso_request_info(case_id: str, body: VsoRequestInfoBody) -> CaseMessageResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        if not body.request_text.strip():
+            raise HTTPException(status_code=422, detail="Request text required")
+        collaboration.vso_open_case(db, claim, body.reviewer_name)
+        message = collaboration.vso_request_info(
+            db,
+            claim,
+            reviewer_name=body.reviewer_name,
+            request_text=body.request_text,
+        )
+    return _message_response(message)
+
+
+@router.post("/cases/{case_id}/vso/approve", response_model=CaseSummaryResponse)
+def vso_approve_case(case_id: str, body: VsoApproveBody) -> CaseSummaryResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        collaboration.vso_open_case(db, claim, body.reviewer_name)
+        try:
+            claim = collaboration.vso_approve_to_file(
+                db,
+                claim,
+                reviewer_name=body.reviewer_name,
+                note=body.note,
+            )
+        except collaboration.ApprovalBlockedError as error:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot approve yet: " + "; ".join(error.blockers),
+            ) from error
+    return service.case_summary(claim)
+
+
+@router.get("/cases/{case_id}/itf", response_model=ItfStatusResponse)
+def get_itf_status(case_id: str) -> ItfStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        status = itf_helpers.itf_status(claim)
+    return ItfStatusResponse(
+        applies=status.applies,
+        filed_on=status.filed_on,
+        expires_on=status.expires_on,
+        days_left=status.days_left,
+        urgency=status.urgency,
+        message=status.message,
+    )
+
+
+@router.post("/cases/{case_id}/itf", response_model=ItfStatusResponse)
+def record_itf(case_id: str, body: Optional[ItfRecordRequest] = None) -> ItfStatusResponse:
+    from datetime import date as date_cls
+
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        if not itf_helpers.itf_applies(claim):
+            raise HTTPException(status_code=422, detail="Intent to File is not used on this claim path")
+        filed_on = body.filed_on if body and body.filed_on else date_cls.today()
+        status = itf_helpers.record_itf(claim, filed_on)
+        service.save_claim(db, claim)
+    return ItfStatusResponse(
+        applies=status.applies,
+        filed_on=status.filed_on,
+        expires_on=status.expires_on,
+        days_left=status.days_left,
+        urgency=status.urgency,
+        message=status.message,
+    )
+
+
+@router.get("/cases/{case_id}/poa", response_model=PoaStatusResponse)
+def get_poa_status(case_id: str) -> PoaStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        status = poa_helpers.poa_status(claim)
+    return PoaStatusResponse(
+        applies=status.applies,
+        filed_on=status.filed_on,
+        urgency=status.urgency,
+        message=status.message,
+        filing_on_own=status.filing_on_own,
+    )
+
+
+@router.post("/cases/{case_id}/poa", response_model=PoaStatusResponse)
+def record_poa(case_id: str, body: Optional[PoaRecordRequest] = None) -> PoaStatusResponse:
+    from datetime import date as date_cls
+
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        if body and body.filing_on_own:
+            status = poa_helpers.mark_filing_on_own(claim)
+        else:
+            filed_on = body.filed_on if body and body.filed_on else date_cls.today()
+            status = poa_helpers.record_poa(claim, filed_on)
+        service.save_claim(db, claim)
+    return PoaStatusResponse(
+        applies=status.applies,
+        filed_on=status.filed_on,
+        urgency=status.urgency,
+        message=status.message,
+        filing_on_own=status.filing_on_own,
+    )
+
+
+def _tracker_response(claim) -> TrackerResponse:
+    status = decision_helpers.tracker_status(claim)
+    return TrackerResponse(
+        claim_status=status.claim_status,
+        timeline=[
+            TrackerStepResponse(
+                key=s.key, label=s.label, detail=s.detail, state=s.state,
+            )
+            for s in status.timeline
+        ],
+        submitted_on=status.submitted_on,
+        submission_id=status.submission_id,
+        va_status=status.va_status,
+        decision=DecisionSummaryResponse(
+            has_decision=status.decision.has_decision,
+            decision_date=status.decision.decision_date,
+            outcome=status.decision.outcome,
+            outcome_label=status.decision.outcome_label,
+            summary=status.decision.summary,
+            combined_rating=status.decision.combined_rating,
+            granted=status.decision.granted,
+            denied=status.decision.denied,
+            message=status.decision.message,
+        ),
+        deadlines=[
+            TrackerDeadlineResponse(
+                label=d.label,
+                due=d.due,
+                days_left=d.days_left,
+                urgency=d.urgency,
+                detail=d.detail,
+                hard=d.hard,
+            )
+            for d in status.deadlines
+        ],
+        appeal_doors=[
+            AppealDoorResponse(
+                form_number=d.form_number,
+                title=d.title,
+                detail=d.detail,
+                lock=d.lock,
+                recommended=d.recommended,
+                selected=d.selected,
+            )
+            for d in status.appeal_doors
+        ],
+        legacy_decision=status.legacy_decision,
+    )
+
+
+@router.get("/cases/{case_id}/tracker", response_model=TrackerResponse)
+def get_tracker(case_id: str) -> TrackerResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+    return _tracker_response(claim)
+
+
+@router.post("/cases/{case_id}/decision-date", response_model=DecisionSummaryResponse)
+def record_decision_date(case_id: str, body: DecisionDateRequest) -> DecisionSummaryResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        summary = decision_helpers.record_decision_date(claim, body.decision_date)
+        service.save_claim(db, claim)
+    return DecisionSummaryResponse(
+        has_decision=summary.has_decision,
+        decision_date=summary.decision_date,
+        outcome=summary.outcome,
+        outcome_label=summary.outcome_label,
+        summary=summary.summary,
+        combined_rating=summary.combined_rating,
+        granted=summary.granted,
+        denied=summary.denied,
+        message=summary.message,
+    )
+
+
+def _appeal_response(status: appeal_helpers.AppealStatus) -> AppealStatusResponse:
+    return AppealStatusResponse(
+        applies=status.applies,
+        disagrees=status.disagrees,
+        selected_door=status.selected_door,
+        recommended_door=status.recommended_door,
+        message=status.message,
+        picker_options=[
+            AppealPickerOptionResponse(
+                form_number=o.form_number,
+                title=o.title,
+                picker_label=o.picker_label,
+                detail=o.detail,
+                lock=o.lock,
+            )
+            for o in status.picker_options
+        ],
+        checklist=[
+            AppealCheckItemResponse(label=i.label, detail=i.detail)
+            for i in status.checklist
+        ],
+        form_url=status.form_url,
+        legacy_decision=status.legacy_decision,
+    )
+
+
+@router.get("/cases/{case_id}/appeal", response_model=AppealStatusResponse)
+def get_appeal_status(case_id: str) -> AppealStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        status = appeal_helpers.appeal_status(claim)
+    return _appeal_response(status)
+
+
+@router.post("/cases/{case_id}/appeal/disagree", response_model=AppealStatusResponse)
+def mark_appeal_disagree(case_id: str) -> AppealStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        status = appeal_helpers.mark_disagrees(claim)
+        service.save_claim(db, claim)
+    return _appeal_response(status)
+
+
+@router.post("/cases/{case_id}/appeal/accept", response_model=AppealStatusResponse)
+def mark_appeal_accept(case_id: str) -> AppealStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        status = appeal_helpers.mark_accepts_decision(claim)
+        service.save_claim(db, claim)
+    return _appeal_response(status)
+
+
+@router.post("/cases/{case_id}/appeal", response_model=AppealStatusResponse)
+def select_appeal_door(case_id: str, body: AppealSelectRequest) -> AppealStatusResponse:
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        try:
+            status = appeal_helpers.select_door(claim, body.door)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        service.save_claim(db, claim)
+    return _appeal_response(status)
+
+
+@router.get("/cases/{case_id}/live", response_model=CaseLiveResponse)
+def case_live_state(case_id: str) -> CaseLiveResponse:
+    from src import evidence_rules
+
+    with deps.store() as db:
+        claim = service.load_claim(db, case_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        messages = collaboration.list_messages(db, case_id)
+    seen = set()
+    evidence_items: list = []
+    for item in claim.evidence:
+        key = item.evidence_type.value
+        if key in seen:
+            continue
+        seen.add(key)
+        evidence_items.append(
+            LiveEvidenceResponse(
+                evidence_type=key,
+                label=evidence_rules.friendly(item.evidence_type),
+            )
+        )
+    return CaseLiveResponse(
+        case_id=case_id,
+        status=claim.status.value,
+        vso_approved=collaboration.vso_approved(claim),
+        in_vso_queue=claim.status in (ClaimStatus.READY_FOR_VSO, ClaimStatus.IN_VSO_REVIEW),
+        messages=[
+            LiveMessageResponse(
+                id=m.id,
+                author=m.author.value,
+                body=m.body,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in messages
+        ],
+        latest_message_id=messages[-1].id if messages else None,
+        message_count=len(messages),
+        evidence=evidence_items,
+        evidence_count=len(evidence_items),
+    )
+
+
+@router.get("/live/inbox", response_model=List[InboxLiveItemResponse])
+def live_inbox() -> List[InboxLiveItemResponse]:
+    with deps.store() as db:
+        rows = db.list_claims()
+        items: List[InboxLiveItemResponse] = []
+        for claim_id, name, _claim_type, status in rows:
+            claim = service.load_claim(db, claim_id)
+            if claim is None:
+                continue
+            messages = db.list_messages(claim_id)
+            last = messages[-1] if messages else None
+            items.append(
+                InboxLiveItemResponse(
+                    claim_id=claim_id,
+                    veteran_name=name,
+                    status=status,
+                    vso_approved=collaboration.vso_approved(claim),
+                    latest_message_id=last.id if last else None,
+                    latest_author=last.author.value if last else None,
+                    latest_preview=(last.body[:100] if last else None),
+                )
+            )
+    return items

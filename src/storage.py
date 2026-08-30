@@ -7,16 +7,19 @@ at MVP scale (one veteran working on one claim at a time).
 
 from __future__ import annotations
 
+import json
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from src.models import (
+    CaseMessage,
     Claim,
     LaneContext,
     Condition,
     EvidenceItem,
+    MessageAuthor,
     ServiceEvent,
     StatusEvent,
     Task,
@@ -29,8 +32,18 @@ DEFAULT_DB_PATH = Path("vacare.db")
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "va_claim_schema.sql"
 
 
-def _iso(value: Optional[date]) -> Optional[str]:
-    return value.isoformat() if value else None
+def _iso(value: Optional[Union[date, datetime]]) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    return value.isoformat()
+
+
+def _parse_message_timestamp(raw: str) -> datetime:
+    if "T" in raw:
+        return datetime.fromisoformat(raw)
+    return datetime.fromisoformat(f"{raw}T00:00:00")
 
 
 def _store_dob(value: Optional[date]) -> str:
@@ -85,6 +98,30 @@ class ClaimStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_va_submissions_claim_id
                     ON va_submissions(claim_id);
+                """
+            )
+        if "case_messages" not in tables:
+            self.connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS case_messages (
+                    id TEXT PRIMARY KEY,
+                    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                    author TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_case_messages_claim_id
+                    ON case_messages(claim_id);
+                """
+            )
+        if "chat_sessions" not in tables:
+            self.connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    claim_id TEXT PRIMARY KEY REFERENCES claims(id) ON DELETE CASCADE,
+                    session_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -297,6 +334,98 @@ class ClaimStore:
         """Convenience for the CLI: the most recently created claim."""
         claims = self.list_claims()
         return self.load_claim(claims[0][0]) if claims else None
+
+    # -- veteran ↔ VSO messages -----------------------------------------------
+
+    def add_message(self, claim_id: str, author: MessageAuthor, body: str) -> CaseMessage:
+        message = CaseMessage(
+            claim_id=claim_id,
+            author=author,
+            body=body.strip(),
+            created_at=datetime.utcnow(),
+        )
+        if not message.body:
+            raise ValueError("Message cannot be empty")
+        self.connection.execute(
+            """
+            INSERT INTO case_messages (id, claim_id, author, body, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (message.id, claim_id, author.value, message.body, _iso(message.created_at)),
+        )
+        self.connection.commit()
+        return message
+
+    def list_messages(self, claim_id: str) -> List[CaseMessage]:
+        rows = self.connection.execute(
+            """
+            SELECT id, claim_id, author, body, created_at
+            FROM case_messages WHERE claim_id = ?
+            ORDER BY created_at ASC, rowid ASC
+            """,
+            (claim_id,),
+        ).fetchall()
+        return [
+            CaseMessage(
+                id=row["id"],
+                claim_id=row["claim_id"],
+                author=MessageAuthor(row["author"]),
+                body=row["body"],
+                created_at=_parse_message_timestamp(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def save_chat_session(self, claim_id: str, session_data: dict) -> None:
+        payload = json.dumps(session_data)
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        self.connection.execute(
+            """
+            INSERT INTO chat_sessions (claim_id, session_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(claim_id) DO UPDATE SET
+                session_json=excluded.session_json,
+                updated_at=excluded.updated_at
+            """,
+            (claim_id, payload, now),
+        )
+        self.connection.commit()
+
+    def load_chat_session(self, claim_id: str) -> Optional[dict]:
+        row = self.connection.execute(
+            "SELECT session_json FROM chat_sessions WHERE claim_id = ?",
+            (claim_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["session_json"])
+
+    def delete_chat_session(self, claim_id: str) -> None:
+        self.connection.execute("DELETE FROM chat_sessions WHERE claim_id = ?", (claim_id,))
+        self.connection.commit()
+
+    def list_vso_queue(self) -> List[Tuple[str, str, str, str, str]]:
+        """(claim_id, veteran name, status, updated, condition summary) for VSO inbox."""
+        rows = self.connection.execute(
+            """
+            SELECT c.id, v.first_name, v.last_name, c.status, c.created_on,
+                   (SELECT GROUP_CONCAT(name, ', ') FROM conditions WHERE claim_id = c.id) AS conds
+            FROM claims c
+            JOIN veterans v ON v.id = c.veteran_id
+            WHERE c.status IN ('ready_for_vso', 'in_vso_review')
+            ORDER BY c.created_on DESC, c.id DESC
+            """
+        ).fetchall()
+        return [
+            (
+                row["id"],
+                f"{row['first_name']} {row['last_name']}",
+                row["status"],
+                row["created_on"],
+                row["conds"] or "No conditions yet",
+            )
+            for row in rows
+        ]
 
 
 def _drop_claim_id(rows: List[sqlite3.Row]) -> List[dict]:

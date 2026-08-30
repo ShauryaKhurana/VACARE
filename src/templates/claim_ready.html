@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% from "partials/itf_help.html" import button as itf_help_btn, modal as itf_help_modal %}
+{% from "partials/poa_help.html" import button as poa_help_btn, modal as poa_help_modal %}
+{% block content %}
+<style>
+  .reply-actions {
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:10px;
+  }
+  .reply-actions .btn-upload {
+    font-family:"Public Sans",sans-serif; font-weight:700; font-size:14.5px;
+    padding:9px 16px; border-radius:6px; border:1.6px solid var(--ink);
+    background:#fff; color:var(--ink); cursor:pointer;
+  }
+  .reply-actions .btn-upload:hover { background:var(--wash); }
+  .claim-attachment {
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px;
+    margin-top:10px; padding:10px 12px; border-radius:8px;
+    border:1.4px solid #1e6f45; background:#eef8f2; font-size:14px;
+  }
+  .claim-attachment[hidden] { display:none !important; }
+  .claim-attachment-label { font-weight:700; color:#1e6f45; }
+  .claim-attachment-name { font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .claim-attachment-actions { display:flex; gap:8px; margin-left:auto; flex-shrink:0; }
+  .claim-attachment-remove,
+  .claim-attachment-send {
+    font-family:inherit; font-size:13px; font-weight:600;
+    padding:4px 10px; border-radius:6px; cursor:pointer;
+  }
+  .claim-attachment-remove {
+    border:1px solid var(--rule); background:#fff; color:var(--muted);
+  }
+  .claim-attachment-remove:hover { color:var(--ink); }
+  .claim-attachment-send {
+    border:1.6px solid var(--ink); background:var(--ink); color:#fff;
+  }
+  .claim-attachment-send:hover { filter:brightness(1.05); }
+  .claim-upload-form { display:none; }
+  .vacare-msg-system em { color:var(--muted); font-size:13px; }
+  .vacare-msg-system.thread-upload em { color:#a8adb4; font-size:12px; font-style:normal; }
+  .vacare-msg-system.thread-upload .vacare-msg-meta { color:#a8adb4; font-size:10px; }
+</style>
+<h1>{{ claim.veteran.full_name }}</h1>
+<p class="muted">{{ page_subtitle }}</p>
+
+{% if message %}<div class="banner">{{ message|replace('+',' ') }}</div>{% endif %}
+
+{% include "partials/tracker.html" %}
+
+<div id="vacare-live-notice" class="vacare-live-notice" hidden>
+  <span class="vacare-live-notice-text">New update</span>
+  <button type="button" data-live-dismiss>Dismiss</button>
+</div>
+
+<div class="wash">
+  {% if claim.veteran.dob %}Born {{ claim.veteran.dob }} · {% endif %}
+  {% if claim.veteran.branch %}{{ claim.veteran.branch.value.replace('_',' ') }} · {% endif %}
+  {% if claim.veteran.service_start %}Served {{ claim.veteran.service_start }} to {{ claim.veteran.service_end or 'present' }}{% endif %}
+</div>
+
+{% if claim.conditions %}
+<h2 style="margin-top:24px">What you're claiming</h2>
+<ul>
+  {% for c in claim.conditions %}
+  <li style="margin-bottom:8px"><b>{{ c.name }}</b><br>
+    <span class="muted" style="font-size:14px">{{ c.current_symptoms }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="banner" style="border-left-color:#b3261e">No conditions yet. <a href="/chat">Finish the chat intake</a>.</div>
+{% endif %}
+
+<h2 style="margin-top:24px">Documents on file</h2>
+<div id="vacare-documents-on-file" data-count="{{ claim.evidence|length }}">
+  {% if claim.evidence %}
+  <p>{% for e in claim.evidence %}<span class="badge b-veteran" style="margin-right:6px">{{ friendly(e.evidence_type) }}</span>{% endfor %}</p>
+  {% else %}
+  <p class="muted" style="font-size:14px">No documents uploaded yet.</p>
+  {% endif %}
+</div>
+
+{% if show_prep_sections and itf.applies %}
+<div class="heading-with-help" style="margin:38px 0 12px;padding-bottom:6px;border-bottom:3px solid var(--ink)">
+  <h2 style="font-family:'Archivo',sans-serif;font-weight:800;font-size:20px">{{ itf_title }}</h2>
+  {{ itf_help_btn() }}
+</div>
+<div class="banner" style="border-left-color:{% if itf.urgency == 'missing' %}#b3261e{% elif itf.urgency in ['urgent','expired'] %}#b3261e{% elif itf.urgency == 'soon' %}#8a5a12{% else %}#1e6f45{% endif %}">
+  {{ itf.message }}
+  {% if itf.filed_on %}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">Saved with VA: {{ itf.filed_on }}{% if itf.expires_on %} · good through {{ itf.expires_on }}{% endif %}</p>
+  {% endif %}
+</div>
+{% if itf.urgency == 'missing' or itf.urgency == 'expired' %}
+<form method="post" action="/claim/{{ claim.id }}/itf" style="margin-top:10px">
+  <label for="itf-date">When did you file this (or use today)?</label>
+  <input type="date" name="filed_on" id="itf-date" value="{{ claim.created_on }}">
+  <button type="submit" style="margin-top:8px">Save this date</button>
+</form>
+{% endif %}
+{{ itf_help_modal() }}
+{% endif %}
+
+{% if show_prep_sections and poa.applies %}
+<div class="heading-with-help" style="margin:28px 0 12px;padding-bottom:6px;border-bottom:3px solid var(--ink)">
+  <h2 style="font-family:'Archivo',sans-serif;font-weight:800;font-size:20px">{{ poa_title }}</h2>
+  {{ poa_help_btn() }}
+</div>
+<div class="banner" style="border-left-color:{% if poa.urgency == 'missing' %}#b3261e{% else %}#1e6f45{% endif %}">
+  {{ poa.message }}
+  {% if poa.filed_on %}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">Saved with VA: {{ poa.filed_on }}</p>
+  {% endif %}
+</div>
+{% if poa.urgency == 'missing' %}
+<form method="post" action="/claim/{{ claim.id }}/poa" style="margin-top:10px">
+  <label for="poa-date">When did you appoint your VSO (or use today)?</label>
+  <input type="date" name="filed_on" id="poa-date" value="{{ claim.created_on }}">
+  <button type="submit" style="margin-top:8px">Save VSO appointment</button>
+</form>
+{% endif %}
+{{ poa_help_modal() }}
+{% elif show_prep_sections and poa.filing_on_own %}
+<p class="muted" style="margin-top:18px;font-size:14px">You're filing on your own — no VSO appointment needed.</p>
+{% endif %}
+
+<div id="vacare-messages-section" {% if not case_messages and not in_vso_queue %}hidden{% endif %}>
+<h2>Messages with your VSO</h2>
+<div id="vacare-msg-thread" class="wash" style="margin-bottom:12px"
+     data-live-claim="{{ claim.id }}"
+     data-initial-latest="{{ latest_message_id }}"
+     data-count="{{ case_messages|length }}">
+  {% for msg in case_messages %}
+  <div class="vacare-msg{% if msg.author.value == 'system' %} vacare-msg-system{% if msg|upload_notice %} thread-upload{% endif %}{% endif %}" data-id="{{ msg.id }}">
+    <span class="vacare-msg-meta">{{ msg.author.value|upper }}{% if msg.created_at %} · {{ msg.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span><br>
+    {% if msg.author.value == 'system' %}<em>{{ msg|msg_veteran }}</em>{% else %}{{ msg.body }}{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<form method="post" action="/claim/{{ claim.id }}/message"
+      id="claim-reply-form" data-vacare-loading
+      data-loading-msg="Sending your reply...">
+  <label for="vso-reply">Reply</label>
+  <textarea name="body" id="vso-reply" rows="3" placeholder="Answer a question or add details..."></textarea>
+  <div id="claim-attachment-preview" class="claim-attachment" hidden>
+    <span class="claim-attachment-label">Ready to send</span>
+    <span class="claim-attachment-name" id="claim-attachment-name"></span>
+    <div class="claim-attachment-actions">
+      <button type="button" class="claim-attachment-remove" id="claim-attachment-remove">Remove</button>
+      <button type="submit" form="claim-upload-form" class="claim-attachment-send" id="claim-attachment-send">Send</button>
+    </div>
+  </div>
+  <div class="reply-actions">
+    <button type="submit" id="claim-send-btn">Send reply</button>
+    {% if show_prep_sections or in_vso_queue %}
+    <button type="button" class="btn-upload" id="claim-upload-btn">Upload</button>
+    {% endif %}
+  </div>
+</form>
+<form method="post" action="/claim/{{ claim.id }}/documents" enctype="multipart/form-data"
+      id="claim-upload-form" class="claim-upload-form" data-vacare-loading
+      data-loading-msg="Sending your document...">
+  <input type="file" name="file" id="claim-doc-file"
+         accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt" required>
+</form>
+</div>
+
+{% if show_prep_sections and readiness.missing %}
+<div class="banner" style="border-left-color:#b3261e; margin-top:18px">
+  <b>Before sending to VA, we still need:</b>
+  <ul>{% for m in readiness.missing %}<li>{{ m }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if show_prep_sections %}
+<h2 style="margin-top:28px">Next steps</h2>
+
+<div id="vacare-next-steps">
+{% if vso_approved %}
+<div class="banner" style="border-left-color:var(--ok,#1e6f45)">
+  <b>Your VSO approved this packet.</b> You can download the form and test-submit to the VA sandbox.
+</div>
+{% elif in_vso_queue %}
+<div class="banner" style="border-left-color:var(--ok,#1e6f45)">
+  <b>With your VSO for review.</b> They may message you here with questions.
+</div>
+{% else %}
+<p class="muted" style="margin-top:8px">Send your packet to a VSO for review before filing with the VA.</p>
+<form method="post" action="/claim/{{ claim.id }}/vso-submit" style="margin-top:10px">
+  <button type="submit">Send to VSO for review</button>
+</form>
+{% endif %}
+</div>
+
+<p style="margin-top:12px">
+  <a href="/claim/{{ claim.id }}/chat" class="btn ghost">Continue in chat</a>
+  <a href="/claim/{{ claim.id }}/526ez" class="btn">Download 21-526EZ</a>
+</p>
+<form method="post" action="/claim/{{ claim.id }}/va-intake" style="margin-top:10px">
+  <button type="submit" id="vacare-va-submit" {% if not vso_approved %}disabled title="Get VSO approval first"{% elif readiness.missing %}disabled title="Finish missing items first"{% endif %}>
+    Send to VA sandbox
+  </button>
+</form>
+<p class="muted" style="font-size:13px; margin-top:8px">Test upload only — have a VSO review before any real filing.</p>
+{% endif %}
+
+{% if claim.va_submissions %}
+<h2>VA sandbox submissions</h2>
+<table>
+  <tr><th>ID</th><th>Status</th><th>Date</th></tr>
+  {% for sub in claim.va_submissions %}
+  <tr>
+    <td class="form-no">{{ sub.submission_id }}</td>
+    <td>{{ sub.status }}</td>
+    <td>{{ sub.submitted_on }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<p style="margin-top:28px">
+  <a href="/" class="btn ghost">All claims</a>
+  <a href="/claim/{{ claim.id }}/details" class="muted" style="font-size:13px; margin-left:12px">Detailed view →</a>
+</p>
+{% include "partials/live_client.html" %}
+<script>VacareLive.startCasePoll("{{ claim.id }}", "veteran");</script>
+<script>
+(function () {
+  var uploadBtn = document.getElementById("claim-upload-btn");
+  var uploadForm = document.getElementById("claim-upload-form");
+  var fileInput = document.getElementById("claim-doc-file");
+  var preview = document.getElementById("claim-attachment-preview");
+  var fileName = document.getElementById("claim-attachment-name");
+  var removeBtn = document.getElementById("claim-attachment-remove");
+
+  function bindFileInput(input) {
+    input.addEventListener("change", onFileChange);
+  }
+
+  function onFileChange() {
+    if (fileInput.files && fileInput.files.length) {
+      showAttachment(fileInput.files[0].name);
+    } else {
+      clearAttachment();
+    }
+  }
+
+  function clearAttachment() {
+    if (!fileInput || !preview || !fileName) return;
+    fileName.textContent = "";
+    preview.hidden = true;
+    preview.setAttribute("hidden", "hidden");
+    // Replace input so browsers drop the selected file entirely.
+    var fresh = fileInput.cloneNode(true);
+    fresh.removeAttribute("required");
+    fileInput.parentNode.replaceChild(fresh, fileInput);
+    fileInput = fresh;
+    bindFileInput(fileInput);
+  }
+
+  function showAttachment(name) {
+    if (!preview || !fileName || !fileInput) return;
+    fileName.textContent = name;
+    fileInput.setAttribute("required", "required");
+    preview.hidden = false;
+    preview.removeAttribute("hidden");
+  }
+
+  if (!fileInput || !preview || !fileName) return;
+
+  bindFileInput(fileInput);
+
+  if (uploadBtn) {
+    uploadBtn.addEventListener("click", function () {
+      fileInput.click();
+    });
+  }
+  if (removeBtn) {
+    removeBtn.addEventListener("click", function (event) {
+      event.preventDefault();
+      clearAttachment();
+    });
+  }
+  if (uploadForm) {
+    uploadForm.addEventListener("submit", function () {
+      if (preview) preview.hidden = true;
+    });
+  }
+  window.addEventListener("pageshow", clearAttachment);
+  clearAttachment();
+})();
+</script>
+{% endblock %}

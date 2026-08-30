@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
@@ -232,3 +232,176 @@ class DocumentUploadResponse(BaseModel):
     evidence_type: str
     message: str
     checklist: ChecklistResponse
+
+
+class CaseMessageResponse(BaseModel):
+    id: str
+    claim_id: str
+    author: str
+    body: str
+    created_at: datetime
+
+
+class PostMessageRequest(BaseModel):
+    author: str = "veteran"
+    body: str
+
+
+class VsoQueueItemResponse(BaseModel):
+    claim_id: str
+    veteran_name: str
+    status: str
+    created_on: str
+    conditions: str
+
+
+class VsoRequestInfoBody(BaseModel):
+    reviewer_name: str = "VSO"
+    request_text: str
+
+
+class VsoApproveBody(BaseModel):
+    reviewer_name: str = "VSO"
+    note: str = "Approved to file with VA."
+
+
+class ItfRecordRequest(BaseModel):
+    filed_on: Optional[date] = None  # defaults to today when omitted
+
+
+class ItfStatusResponse(BaseModel):
+    applies: bool
+    filed_on: Optional[date] = None
+    expires_on: Optional[date] = None
+    days_left: Optional[int] = None
+    urgency: str
+    message: str
+
+
+class PoaRecordRequest(BaseModel):
+    filed_on: Optional[date] = None
+    filing_on_own: bool = False
+
+
+class PoaStatusResponse(BaseModel):
+    applies: bool
+    filed_on: Optional[date] = None
+    urgency: str
+    message: str
+    filing_on_own: bool = False
+
+
+class LiveMessageResponse(BaseModel):
+    id: str
+    author: str
+    body: str
+    created_at: str
+
+
+class LiveEvidenceResponse(BaseModel):
+    evidence_type: str
+    label: str
+
+
+class CaseLiveResponse(BaseModel):
+    case_id: str
+    status: str
+    vso_approved: bool
+    in_vso_queue: bool
+    messages: List[LiveMessageResponse]
+    latest_message_id: Optional[str] = None
+    message_count: int = 0
+    evidence: List[LiveEvidenceResponse] = Field(default_factory=list)
+    evidence_count: int = 0
+
+
+class InboxLiveItemResponse(BaseModel):
+    claim_id: str
+    veteran_name: str
+    status: str
+    vso_approved: bool
+    latest_message_id: Optional[str] = None
+    latest_author: Optional[str] = None
+    latest_preview: Optional[str] = None
+
+
+class TrackerStepResponse(BaseModel):
+    key: str
+    label: str
+    detail: str
+    state: str
+
+
+class TrackerDeadlineResponse(BaseModel):
+    label: str
+    due: date
+    days_left: int
+    urgency: str
+    detail: str
+    hard: bool
+
+
+class DecisionSummaryResponse(BaseModel):
+    has_decision: bool
+    decision_date: Optional[date] = None
+    outcome: Optional[str] = None
+    outcome_label: str
+    summary: Optional[str] = None
+    combined_rating: Optional[int] = None
+    granted: List[str] = Field(default_factory=list)
+    denied: List[str] = Field(default_factory=list)
+    message: str
+
+
+class AppealDoorResponse(BaseModel):
+    form_number: str
+    title: str
+    detail: str
+    lock: Optional[str] = None
+    recommended: bool = False
+    selected: bool = False
+
+
+class TrackerResponse(BaseModel):
+    claim_status: str
+    timeline: List[TrackerStepResponse]
+    submitted_on: Optional[date] = None
+    submission_id: Optional[str] = None
+    va_status: Optional[str] = None
+    decision: DecisionSummaryResponse
+    deadlines: List[TrackerDeadlineResponse]
+    appeal_doors: List[AppealDoorResponse]
+    legacy_decision: bool = False
+
+
+class DecisionDateRequest(BaseModel):
+    decision_date: date
+
+
+class AppealSelectRequest(BaseModel):
+    door: str  # 20-0996, 20-0995, 10182
+
+
+class AppealPickerOptionResponse(BaseModel):
+    form_number: str
+    title: str
+    picker_label: str
+    detail: str
+    lock: str
+
+
+class AppealCheckItemResponse(BaseModel):
+    label: str
+    detail: str
+
+
+class AppealStatusResponse(BaseModel):
+    applies: bool
+    disagrees: bool
+    selected_door: Optional[str] = None
+    recommended_door: Optional[str] = None
+    message: str
+    picker_options: List[AppealPickerOptionResponse] = Field(default_factory=list)
+    checklist: List[AppealCheckItemResponse] = Field(default_factory=list)
+    form_url: Optional[str] = None
+    legacy_decision: bool = False

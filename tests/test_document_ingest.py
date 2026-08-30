@@ -1,10 +1,13 @@
 """Tests for document upload and ingestion."""
 
+from datetime import date
 from unittest.mock import patch
 
+from src import parse_cache
+from src.claim_intake import ClaimIntake
 from src.document_ingest import ingest_document
-from src.models import Claim, Veteran
-from tests.test_extract import DD214_PAYLOAD
+from src.models import Claim, EvidenceType, Veteran
+from tests.test_extract import DD214_PAYLOAD, MEDICAL_RECORD_PAYLOAD
 
 
 def test_ingest_without_gemini_stores_file_only(tmp_path, monkeypatch):
@@ -28,6 +31,80 @@ def test_ingest_dd214_merges_veteran_fields(mock_extract, tmp_path, monkeypatch)
     assert "name" in result.fields_applied
     assert claim.veteran.first_name == "Dana"
     assert claim.veteran.service_end is not None
+    mock_extract.assert_called_once()
+
+
+@patch("src.document_ingest.extract.extract_from_document", return_value=DD214_PAYLOAD)
+def test_ingest_reparses_dd214_when_already_on_file(mock_extract, tmp_path, monkeypatch):
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr("src.gemini.available", lambda: True)
+    claim = Claim(veteran=Veteran(first_name="Dana", last_name="Reyes", service_start=date(2007, 1, 1)))
+    ClaimIntake(claim).add_evidence(
+        evidence_type=EvidenceType.DD214,
+        title="Existing DD-214",
+        source="upload",
+    )
+    result = ingest_document(claim, "dd214-again.pdf", b"%PDF-new-bytes")
+    assert result.document_type == "dd214"
+    mock_extract.assert_called_once()
+
+
+@patch("src.document_ingest.extract.extract_from_document", return_value=DD214_PAYLOAD)
+def test_ingest_reuses_parse_cache_for_same_bytes(mock_extract, tmp_path, monkeypatch):
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr("src.gemini.available", lambda: True)
+    pdf = b"%PDF-1.4 same file bytes"
+    claim_a = Claim(veteran=Veteran(first_name="New", last_name="Case"))
+    ingest_document(claim_a, "dd214.pdf", pdf)
+    claim_b = Claim(veteran=Veteran(first_name="New", last_name="Case"))
+    result = ingest_document(claim_b, "dd214-copy.pdf", pdf)
+    assert "recognized this document from earlier" in result.message
+    mock_extract.assert_called_once()
+
+
+@patch("src.document_ingest.extract.extract_from_document", return_value=DD214_PAYLOAD)
+def test_ingest_reuses_disk_parse_cache_after_memory_cleared(mock_extract, tmp_path, monkeypatch):
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr("src.gemini.available", lambda: True)
+    pdf = b"%PDF-1.4 persisted cache bytes"
+    claim_a = Claim(veteran=Veteran(first_name="New", last_name="Case"))
+    ingest_document(claim_a, "dd214.pdf", pdf)
+    parse_cache.clear()
+    claim_b = Claim(veteran=Veteran(first_name="New", last_name="Case"))
+    result = ingest_document(claim_b, "dd214.pdf", pdf)
+    assert result.document_type == "dd214"
+    assert "recognized this document from earlier" in result.message
+    mock_extract.assert_called_once()
+
+
+@patch("src.document_ingest.extract.extract_from_document", return_value=MEDICAL_RECORD_PAYLOAD)
+def test_ingest_medical_record_adds_conditions(mock_extract, tmp_path, monkeypatch):
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr("src.gemini.available", lambda: True)
+    claim = Claim(veteran=Veteran(first_name="Dana", last_name="Reyes"))
+    result = ingest_document(claim, "va_note.pdf", b"%PDF-medical-record")
+    assert result.document_type == "medical_record"
+    assert result.parsed_with_gemini is True
+    names = {condition.name for condition in claim.conditions}
+    assert "Tinnitus" in names
+    assert "Low back pain" in names
+    mock_extract.assert_called_once()
+
+
+@patch("src.document_ingest.extract.extract_from_document", return_value=MEDICAL_RECORD_PAYLOAD)
+def test_medical_record_reuses_disk_cache(mock_extract, tmp_path, monkeypatch):
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr("src.gemini.available", lambda: True)
+    pdf = b"%PDF-medical same bytes"
+    ingest_document(Claim(veteran=Veteran(first_name="New", last_name="Case")), "note.pdf", pdf)
+    parse_cache.clear()
+    result = ingest_document(
+        Claim(veteran=Veteran(first_name="New", last_name="Case")),
+        "note-copy.pdf",
+        pdf,
+    )
+    assert result.document_type == "medical_record"
+    assert "recognized this document from earlier" in result.message
     mock_extract.assert_called_once()
 
 

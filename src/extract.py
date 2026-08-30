@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, List, Optional
 
-from src import gemini
+from src import gemini, parse_cache
 from src.gemini import Attachment, GeminiError
 
 # --- schemas ---------------------------------------------------------------
@@ -85,6 +85,26 @@ DOCUMENT_SCHEMA = {
                      "dishonorable", "uncharacterized", "unknown"],
         },
         "decision_date": {"type": "string", "description": "For a decision letter: YYYY-MM-DD or empty"},
+        "outcome": {
+            "type": "string",
+            "enum": ["granted", "partial", "denied", "increased", "decreased",
+                     "unchanged", "mixed", "unknown"],
+            "description": "For a decision letter: overall result",
+        },
+        "combined_rating": {
+            "type": "integer",
+            "description": "Combined disability rating percentage if stated (0-100)",
+        },
+        "granted_conditions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Conditions granted or increased on a decision letter",
+        },
+        "denied_conditions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Conditions denied or deferred on a decision letter",
+        },
         "conditions": {"type": "array", "items": _CONDITION},
         "providers": {"type": "array", "items": {"type": "string"},
                       "description": "Treating doctors, clinics, or hospitals named"},
@@ -93,6 +113,25 @@ DOCUMENT_SCHEMA = {
     # when genuinely absent) instead of silently omitting them on some runs.
     "required": ["document_type", "confidence", "summary", "first_name", "last_name",
                  "date_of_birth", "service_start", "service_end"],
+}
+
+# Story + document in one Gemini call (chat sends both on the first turn).
+INTAKE_TURN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **STORY_SCHEMA["properties"],
+        "document_type": DOCUMENT_SCHEMA["properties"]["document_type"],
+        "confidence": DOCUMENT_SCHEMA["properties"]["confidence"],
+        "summary": DOCUMENT_SCHEMA["properties"]["summary"],
+        "first_name": DOCUMENT_SCHEMA["properties"]["first_name"],
+        "last_name": DOCUMENT_SCHEMA["properties"]["last_name"],
+        "date_of_birth": DOCUMENT_SCHEMA["properties"]["date_of_birth"],
+        "branch": DOCUMENT_SCHEMA["properties"]["branch"],
+        "service_start": DOCUMENT_SCHEMA["properties"]["service_start"],
+        "service_end": DOCUMENT_SCHEMA["properties"]["service_end"],
+        "discharge_type": DOCUMENT_SCHEMA["properties"]["discharge_type"],
+    },
+    "required": STORY_SCHEMA["required"] + ["document_type", "summary"],
 }
 
 SYSTEM = (
@@ -160,6 +199,36 @@ def extract_from_story(story: str) -> Dict[str, Any]:
     return gemini.generate_json(prompt, STORY_SCHEMA, system=SYSTEM)
 
 
+def extract_intake_turn(story: str, attachment: Attachment) -> Dict[str, Any]:
+    """Parse the veteran's story and an uploaded document in one Gemini request."""
+    if not gemini.available():
+        raise GeminiError("No Gemini API key configured")
+
+    cached_doc = parse_cache.get(attachment.data)
+    if cached_doc:
+        story_payload = extract_from_story(story)
+        return {**story_payload, **cached_doc}
+
+    prompt = (
+        "A veteran was asked: 'In your own words, what happened and what's bothering you now?'\n\n"
+        f"Their answer:\n\"\"\"\n{story.strip()}\n\"\"\"\n\n"
+        "They also uploaded a document (attached). In one pass:\n"
+        "1. From the story text: extract conditions, in-service event, and situation flags.\n"
+        "2. From the document: identify its type and read identity/service fields. "
+        "For DD-214, use blocks 1, 2, 5, 12a, 12b, 24. Convert YYYY MM DD to YYYY-MM-DD.\n"
+        "Leave any field empty when not clearly present."
+    )
+    payload = gemini.generate_json(
+        prompt,
+        INTAKE_TURN_SCHEMA,
+        system=SYSTEM,
+        attachments=[attachment],
+        timeout=120,
+    )
+    parse_cache.store(attachment.data, payload)
+    return payload
+
+
 def extract_from_document(attachment: Attachment) -> Dict[str, Any]:
     """Identify an uploaded document and read the claim facts off it."""
     if not gemini.available():
@@ -174,10 +243,16 @@ def extract_from_document(attachment: Attachment) -> Dict[str, Any]:
         "convert them to YYYY-MM-DD.\n"
         "If it is a medical record, list the diagnosed conditions, when they began, whether "
         "treatment is ongoing, and the treating providers.\n"
-        "If it is a VA decision letter, read the date of the decision.\n\n"
+        "If it is a VA decision letter, read the decision date, overall outcome "
+        "(granted, partial, denied, increased, etc.), combined rating if shown, "
+        "and which conditions were granted vs denied.\n\n"
         "Leave any field empty if the document does not clearly show it."
     )
-    return gemini.generate_json(prompt, DOCUMENT_SCHEMA, system=SYSTEM, attachments=[attachment])
+    payload = gemini.generate_json(
+        prompt, DOCUMENT_SCHEMA, system=SYSTEM, attachments=[attachment], timeout=120
+    )
+    parse_cache.store(attachment.data, payload)
+    return payload
 
 
 def conditions_from(payload: Dict[str, Any]) -> List[Dict[str, Any]]:

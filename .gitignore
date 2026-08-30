@@ -38,5 +38,8 @@ claim_payload.json
 # Cached blank VA form PDFs
 form_cache/
 
+# Cached document parses (local dev)
+data/parse_cache/
+
 # Uploaded veteran documents (local dev)
 data/uploads/

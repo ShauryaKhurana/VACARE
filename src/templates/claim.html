@@ -3,15 +3,40 @@
 <h1>{{ claim.veteran.full_name }}</h1>
 <p class="muted"><span class="form-no">{{ claim.id }}</span> &middot; status
   <b>{{ claim.status.value.replace('_',' ') }}</b> &middot;
-  <span class="score">{{ score }}/100</span> of the checklist complete</p>
+  <span class="score">{{ score }}/100</span> of the checklist complete
+  {% if checklist.vso_packet_ready %} &middot; <b style="color:var(--ok)">VSO-ready</b>{% endif %}
+</p>
 
-{% if message %}<div class="banner">{{ message }}</div>{% endif %}
+{% if message %}<div class="banner">{{ message|replace('+',' ') }}</div>{% endif %}
+
+{% if checklist.next_ask %}
+<div class="banner"><b>Next:</b> {{ checklist.next_ask }}</div>
+{% endif %}
 
 <div class="card">
   <div class="eyebrow">Your lane</div>
   <h3 style="margin:2px 0 6px; font-family:Archivo; font-size:19px">{{ lane_title }}</h3>
   <p style="margin:0; font-size:14.5px">{{ lane_blurb }}</p>
 </div>
+
+{% if checklist.presumptive_hits %}
+<h2>Presumptive eligibility checks</h2>
+<p class="muted" style="font-size:14px">Deterministic rule results — not legal advice.</p>
+<table>
+  <tr><th>Rule</th><th>Result</th><th>Notes</th></tr>
+  {% for hit in checklist.presumptive_hits %}
+  <tr>
+    <td class="form-no">{{ hit.rule_id }}</td>
+    <td>
+      {% if hit.result == 'MATCH' %}<span class="badge b-doc">match</span>
+      {% elif hit.result == 'NO_MATCH' %}<span class="muted">no match</span>
+      {% else %}<span class="badge b-emp">needs data</span>{% endif %}
+    </td>
+    <td class="muted" style="font-size:13px">{{ hit.explanation }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
 
 {% if deadlines %}
 <h2>Clocks running</h2>
@@ -90,19 +115,56 @@ service links are recorded.</div>
 </table>
 {% endif %}
 
-<h3>Mark a document as received</h3>
+<h3>Upload a document</h3>
+<p class="muted" style="font-size:14px">PDF or photo — Gemini reads it and merges facts into this case
+(same as <span class="form-no">POST /api/cases/{{ claim.id }}/documents</span>).</p>
+<form method="post" action="/claim/{{ claim.id }}/documents" enctype="multipart/form-data"
+      style="display:flex; gap:8px; align-items:center; flex-wrap:wrap" data-vacare-loading
+      data-loading-msg="Uploading and parsing your document...">
+  <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt" required
+         style="max-width:340px">
+  <button type="submit">Upload &amp; parse</button>
+</form>
+
+<h3>Mark a document as received (no file)</h3>
 <form method="post" action="/claim/{{ claim.id }}/evidence" style="display:flex; gap:8px; align-items:center">
   <select name="evidence_type" style="max-width:340px">
     {% for e in evidence_types %}
       {% if e not in held %}<option value="{{ e.value }}">{{ friendly(e) }}</option>{% endif %}
     {% endfor %}
   </select>
-  <button type="submit">Add</button>
+  <button type="submit" class="btn ghost">Add</button>
 </form>
 
 {% if warnings %}
 <h2>Weak points a VSO should confirm</h2>
 <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if review.items %}
+<h2>VSO review cards</h2>
+<p class="muted" style="font-size:14px">From <span class="form-no">GET /api/cases/{{ claim.id }}/review</span></p>
+{% for item in review.items %}
+<div class="card">
+  <span class="badge b-vso">{{ item.category.replace('_',' ') }}</span>
+  <span class="muted" style="font-size:12px; margin-left:6px">{{ item.suggested_state }}</span>
+  <p style="margin:6px 0 0">{{ item.finding }}</p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if claim.va_submissions %}
+<h2>VA submissions</h2>
+<table>
+  <tr><th>Submission ID</th><th>Status</th><th>Date</th></tr>
+  {% for sub in claim.va_submissions %}
+  <tr>
+    <td class="form-no">{{ sub.submission_id }}</td>
+    <td>{{ sub.status }}</td>
+    <td class="muted">{{ sub.submitted_on }}</td>
+  </tr>
+  {% endfor %}
+</table>
 {% endif %}
 
 <h2>Claim status</h2>
@@ -128,6 +190,9 @@ service links are recorded.</div>
 
 <p style="margin-top:24px">
   <a href="/claim/{{ claim.id }}/526ez" class="btn">Download filled 21-526EZ</a>
+  <form method="post" action="/claim/{{ claim.id }}/va-intake" style="display:inline">
+    <button type="submit" class="btn">Submit 526EZ to VA sandbox</button>
+  </form>
   <a href="/claim/{{ claim.id }}/packet" class="btn ghost" target="_blank">View VSO packet</a>
   <a href="/" class="btn ghost">All claims</a>
 </p>

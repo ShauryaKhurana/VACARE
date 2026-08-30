@@ -113,3 +113,19 @@ CREATE TABLE IF NOT EXISTS va_submissions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_va_submissions_claim_id ON va_submissions(claim_id);
+
+CREATE TABLE IF NOT EXISTS case_messages (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_messages_claim_id ON case_messages(claim_id);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    claim_id TEXT PRIMARY KEY REFERENCES claims(id) ON DELETE CASCADE,
+    session_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);

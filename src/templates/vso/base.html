@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}VACARE VSO{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Archivo:wght@500;800&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#191c20; --muted:#62666d; --paper:#fff; --rule:#d9d7d2;
+    --you:#1d4fc4; --doc:#1e6f45; --wash:#f6f5f2; --ok:#1e6f45; --warn:#8a5a12;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:"Public Sans",-apple-system,sans-serif; color:var(--ink); background:var(--paper);
+         margin:0; padding:28px 22px 60px; line-height:1.5; font-size:15px; }
+  .sheet { max-width:1100px; margin:0 auto; }
+  a { color:var(--you); }
+  .eyebrow { font-family:"Courier Prime",monospace; font-size:12px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase; }
+  h1 { font-family:"Archivo",sans-serif; font-weight:800; font-size:clamp(22px,4vw,30px); margin:6px 0 8px; }
+  h2 { font-family:"Archivo",sans-serif; font-size:18px; border-bottom:2px solid var(--ink); padding-bottom:4px; margin:28px 0 12px; }
+  h3 { font-size:14px; margin:16px 0 6px; }
+  nav { font-size:13px; margin-bottom:16px; font-family:"Courier Prime",monospace; display:flex; gap:16px; flex-wrap:wrap; }
+  .muted { color:var(--muted); }
+  .banner { background:var(--wash); border-left:4px solid var(--ink); padding:10px 14px; margin-bottom:16px; font-size:14px; }
+  .banner.warn { border-left-color:var(--warn); }
+  .badge { display:inline-block; font-family:"Courier Prime",monospace; font-weight:700; font-size:10px;
+           letter-spacing:.06em; padding:2px 6px; border:1.4px solid currentColor; border-radius:3px; text-transform:uppercase; }
+  .b-wait { color:var(--warn); } .b-review { color:var(--you); } .b-doc { color:var(--doc); }
+  .wash { background:var(--wash); border-radius:6px; padding:12px 14px; font-size:14px; }
+  .queue-list { display:grid; gap:10px; margin-top:18px; }
+  .queue-card { display:block; text-decoration:none; color:inherit; border:1.6px solid var(--rule); border-radius:8px; padding:14px 16px; transition:border-color .15s; }
+  .queue-card:hover { border-color:var(--ink); }
+  .queue-card-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px; flex-wrap:wrap; }
+  .vso-activity-badge {
+    font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px;
+    background:#e8eefb; color:#1d4fc4; flex-shrink:0;
+  }
+  .vso-activity-badge[hidden] { display:none !important; }
+  .queue-meta { font-size:12px; color:var(--muted); margin:6px 0 0; font-family:"Courier Prime",monospace; }
+  .empty-state { margin-top:18px; padding:24px; text-align:center; }
+  .case-grid { display:grid; grid-template-columns:1fr 320px; gap:24px; margin-top:8px; }
+  @media (max-width:900px){ .case-grid { grid-template-columns:1fr; } }
+  .card { border:1.6px solid var(--ink); border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+  .side-card h3 { margin-top:0; }
+  .score { font-family:"Courier Prime",monospace; font-weight:700; margin:0 0 12px; }
+  .ok-badge { color:var(--ok); font-weight:700; margin:0; }
+  .cond-list { margin:0; padding-left:18px; font-size:14px; }
+  .thread { max-height:360px; overflow-y:auto; border:1px solid var(--rule); border-radius:8px; padding:12px; background:var(--wash); margin-bottom:12px; }
+  .thread-row { margin-bottom:12px; }
+  .thread-row.veteran .thread-body { background:#e8eefb; }
+  .thread-row.vso .thread-body { background:#fff; border:1px solid var(--rule); }
+  .thread-row.system .thread-body { background:transparent; font-style:italic; color:var(--muted); font-size:13px; }
+  .thread-row.system.thread-upload { margin:6px 0; opacity:0.82; }
+  .thread-row.system.thread-upload .thread-meta { color:#a8adb4; font-size:10px; }
+  .thread-row.system.thread-upload .thread-body {
+    color:#a8adb4; font-size:12px; font-style:normal; padding:2px 0 4px;
+  }
+  .thread-meta { font-size:11px; font-family:"Courier Prime",monospace; color:var(--muted); margin-bottom:2px; }
+  .thread-body { padding:8px 10px; border-radius:6px; font-size:14px; white-space:pre-wrap; }
+  label { display:block; margin:8px 0 4px; font-size:13px; font-weight:600; }
+  textarea { width:100%; padding:8px; border:1.4px solid var(--rule); border-radius:5px; font-family:inherit; font-size:14px; }
+  button, .btn { font-family:inherit; font-weight:700; font-size:13px; padding:8px 14px; border-radius:6px;
+                  border:1.6px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; margin-top:8px; }
+  .btn.ghost { background:#fff; color:var(--ink); text-decoration:none; display:inline-block; }
+  .btn-approve { background:var(--ok); border-color:var(--ok); width:100%; }
+  .quick-btns { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+  .quick-btns button { background:#fff; color:var(--ink); text-align:left; font-weight:600; }
+  .itf-card.itf-missing, .itf-card.itf-expired, .itf-card.itf-urgent { border-color:#b3261e; }
+  .itf-card.itf-soon { border-color:var(--warn); }
+  .itf-card.itf-ok { border-color:var(--ok); }
+  .poa-card.poa-missing { border-color:#b3261e; }
+  .poa-card.poa-ok { border-color:var(--ok); }
+  .filing-checklist { list-style:none; margin:0; padding:0; }
+  .filing-checklist li { display:flex; gap:8px; padding:8px 0; border-bottom:1px solid var(--rule); font-size:13px; }
+  .filing-checklist li:last-child { border-bottom:none; }
+  .filing-checklist .check-icon { font-weight:700; width:16px; flex-shrink:0; }
+  .filing-checklist li.ok .check-icon { color:var(--ok); }
+  .filing-checklist li.warn .check-icon { color:var(--warn); }
+  .filing-missing-list {
+    margin:6px 0 0; padding:0 0 0 16px; font-size:12px; color:var(--lock);
+    list-style:disc;
+  }
+  .filing-missing-list li { padding:2px 0; border:none; display:list-item; }
+  .packet-pre { font-size:11px; max-height:200px; overflow:auto; white-space:pre-wrap; margin:8px 0 0; }
+  details summary { cursor:pointer; font-weight:700; }
+  .heading-with-help { display:flex; align-items:center; gap:8px; }
+  .heading-with-help h3 { margin:0; flex:1; }
+  .help-icon-btn {
+    flex-shrink:0; width:22px; height:22px; padding:0; border-radius:50%;
+    border:1.4px solid var(--muted); background:#fff; color:var(--muted);
+    font-size:13px; font-weight:700; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .help-icon-btn:hover { border-color:var(--you); color:var(--you); }
+  .help-modal[hidden] { display:none; }
+  .help-modal { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .help-modal-backdrop { position:absolute; inset:0; background:rgba(25,28,32,0.35); }
+  .help-modal-panel {
+    position:relative; width:min(380px,100%); max-height:min(80vh,420px); overflow-y:auto;
+    background:#fff; border:1.6px solid var(--ink); border-radius:10px; padding:18px 20px 16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.12);
+  }
+  .help-modal-close {
+    position:absolute; top:8px; right:10px; width:28px; height:28px; padding:0;
+    border:none; background:transparent; font-size:22px; cursor:pointer; color:var(--muted);
+  }
+  .help-modal-title { font-family:"Archivo",sans-serif; font-size:17px; font-weight:800; margin:0 28px 10px 0; }
+  .help-modal-body { margin:0; font-size:14px; line-height:1.55; }
+  .help-modal-foot { margin:12px 0 0; font-size:13px; }
+  .vacare-live-notice {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 14px; margin-bottom:12px; font-size:14px; font-weight:600;
+    background:#e8eefb; border-left:4px solid var(--you); border-radius:0 6px 6px 0;
+  }
+  .vacare-live-notice[hidden] { display:none !important; }
+  .vacare-live-notice button {
+    flex-shrink:0; font-size:12px; padding:4px 10px; border:1px solid var(--you);
+    background:#fff; color:var(--you); border-radius:4px; cursor:pointer; font-weight:600;
+  }
+  {% block page_styles %}{% endblock %}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="eyebrow">VACARE · VSO portal · localhost:8001</div>
+  <nav>
+    <a href="/">Inbox</a>
+    <a href="http://127.0.0.1:8000/" target="_blank" rel="noopener">Veteran app ↗</a>
+  </nav>
+  {% block content %}{% endblock %}
+  <p class="muted" style="margin-top:40px;font-size:12px;border-top:1px solid var(--rule);padding-top:12px">
+    VSO review tool — not legal advice. Confirm all facts before filing with VA.
+  </p>
+</div>
+{% block page_scripts %}{% endblock %}
+<script>
+(function () {
+  document.querySelectorAll("[data-help-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var modal = document.getElementById(btn.getAttribute("data-help-open"));
+      if (!modal) return;
+      modal.hidden = false;
+      var close = modal.querySelector(".help-modal-close");
+      if (close) close.focus();
+    });
+  });
+  document.querySelectorAll(".help-modal").forEach(function (modal) {
+    function closeModal() { modal.hidden = true; }
+    modal.querySelectorAll("[data-help-close]").forEach(function (el) {
+      el.addEventListener("click", closeModal);
+    });
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll(".help-modal:not([hidden])").forEach(function (modal) {
+      modal.hidden = true;
+    });
+  });
+})();
+</script>
+</body>
+</html>

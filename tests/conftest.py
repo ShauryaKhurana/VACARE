@@ -3,8 +3,16 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from src import web
+from src import parse_cache, web
 from src.api import deps
+
+
+@pytest.fixture(autouse=True)
+def clear_document_parse_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(parse_cache, "CACHE_DIR", tmp_path / "parse_cache")
+    parse_cache.clear()
+    yield
+    parse_cache.clear()
 
 
 @pytest.fixture
