@@ -126,8 +126,13 @@ DOCUMENT_SCHEMA = {
     # genuinely absent - rather than silently omitting them on some runs.
     # "conditions" belongs here: it went missing intermittently, which read as
     # a document with nothing wrong in it.
+    # "ssn" and "home_of_record" are here for the same reason: they are printed
+    # on every DD-214 (blocks 3 and 7b), but being optional meant the model
+    # dropped them on some runs, so the chat asked the veteran to type an SSN
+    # and address it was already holding.
     "required": ["document_type", "confidence", "summary", "first_name", "last_name",
-                 "date_of_birth", "service_start", "service_end", "conditions"],
+                 "date_of_birth", "service_start", "service_end", "conditions",
+                 "ssn", "home_of_record"],
 }
 
 # Story + document in one Gemini call (chat sends both on the first turn).
@@ -145,8 +150,12 @@ INTAKE_TURN_SCHEMA = {
         "service_start": DOCUMENT_SCHEMA["properties"]["service_start"],
         "service_end": DOCUMENT_SCHEMA["properties"]["service_end"],
         "discharge_type": DOCUMENT_SCHEMA["properties"]["discharge_type"],
+        "ssn": DOCUMENT_SCHEMA["properties"]["ssn"],
+        "home_of_record": DOCUMENT_SCHEMA["properties"]["home_of_record"],
     },
-    "required": STORY_SCHEMA["required"] + ["document_type", "summary"],
+    "required": STORY_SCHEMA["required"] + [
+        "document_type", "summary", "ssn", "home_of_record",
+    ],
 }
 
 SYSTEM = (
@@ -238,7 +247,9 @@ def extract_intake_turn(story: str, attachment: Attachment) -> Dict[str, Any]:
         "They also uploaded a document (attached). In one pass:\n"
         "1. From the story text: extract conditions, in-service event, and situation flags.\n"
         "2. From the document: identify its type and read identity/service fields. "
-        "For DD-214, use blocks 1, 2, 5, 12a, 12b, 24. Convert YYYY MM DD to YYYY-MM-DD.\n"
+        "For DD-214, use block 1 (name), 2 (branch), 3 (Social Security number), "
+        "5 or 6 (date of birth), 7b (home of record), 12a (entry), 12b (separation), "
+        "24 (character of service). Convert YYYY MM DD to YYYY-MM-DD.\n"
         "Leave any field empty when not clearly present."
     )
     payload = gemini.generate_json(
