@@ -1,5 +1,14 @@
 import type { Claim, ChatMessage, RoutingId, VsoInfo } from "@/lib/api/types";
 import type { ApiClient } from "@/lib/api/client";
+import { chatMessagesKey, resetChatScript } from "@/lib/api/mock/chatScript";
+
+/** Removes every local trace of a conversation for this routing id. */
+function clearLocalChatState(routingId: string): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(chatMessagesKey(routingId));
+  }
+  resetChatScript(routingId);
+}
 
 /**
  * Real backend implementation of ApiClient, talking to the Python service
@@ -128,5 +137,9 @@ export class HttpApiClient implements ApiClient {
       `/claims/${encodeURIComponent(routingId)}`,
       { method: "DELETE" },
     );
+    // Deleting server-side is only half of it. The thread is also persisted
+    // in localStorage, so leaving it behind made "Start over" look like it
+    // did nothing: the old conversation reappeared on the next render.
+    clearLocalChatState(routingId);
   }
 }

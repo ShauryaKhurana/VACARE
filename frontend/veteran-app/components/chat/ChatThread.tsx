@@ -515,6 +515,10 @@ export function ChatThread() {
           try {
             const turn = await apiClient.uploadDocument(routingId, file, fileName);
             setMessages((prev) => appendUnique(prev, turn));
+            // The card path advances the dig; attaching from the composer is
+            // the same act and must too, or the progress rail and the
+            // "Start over" control stay stuck on step one.
+            setStepsDone((n) => Math.max(n, 1));
           } catch (error) {
             setMessages((prev) => [
               ...prev,
