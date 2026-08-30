@@ -122,6 +122,17 @@ def send_chat_message(routing_id: str, body: ChatRequest) -> Dict[str, Any]:
     """One conversational turn. Returns only the messages this turn added."""
     session = _load_session(routing_id)
     before = len(session.transcript)
+
+    # An empty send is not an answer. It used to be handed to the extractor,
+    # which spent a full model call reading "" and, at some steps, took the
+    # blank as a decision to skip.
+    if not body.text.strip():
+        question = intake_chat.next_question(session)
+        if question.slot is not intake_chat.Slot.DONE:
+            _say_once(session, question.text)
+        _persist(session)
+        return {"messages": app_bridge.chat_messages(session, since=before)}
+
     try:
         result = intake_chat.apply_answer(session, body.text)
     except GeminiError as error:

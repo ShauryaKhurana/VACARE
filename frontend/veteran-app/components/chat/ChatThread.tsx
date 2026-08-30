@@ -184,7 +184,24 @@ export function ChatThread() {
       }
     }
 
-    void advance();
+    // Read the opening question back rather than posting an empty turn to
+    // provoke it: that round trip ran a model call on an empty string and
+    // left the veteran looking at a blank thread for several seconds.
+    void (async () => {
+      setLoading(true);
+      try {
+        const opening = await apiClient.getMessages(routingId);
+        if (opening.length > 0) {
+          setMessages(pruneStaleAffordances(opening));
+          return;
+        }
+      } catch {
+        // fall through to asking for it
+      } finally {
+        setLoading(false);
+      }
+      await advance();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routingId]);
 

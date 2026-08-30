@@ -8,7 +8,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(upload|consoleErrors|startOver|affordances|draftForm)\.spec\.ts/,
+  testMatch: /(upload|consoleErrors|startOver|affordances|draftForm|firstPrompt)\.spec\.ts/,
   reporter: "list",
   timeout: 120_000,
   use: {

@@ -9,6 +9,9 @@ import { HttpApiClient } from "@/lib/api/http";
 export interface ApiClient {
   getClaim(routingId: RoutingId): Promise<Claim>;
   sendChatMessage(routingId: RoutingId, text: string): Promise<ChatMessage[]>;
+  /** The conversation so far. Used on open so the first question can be read
+   *  back rather than triggering a new turn. */
+  getMessages(routingId: RoutingId): Promise<ChatMessage[]>;
   /** Sends a captured document and returns the turn it produced. */
   uploadDocument(routingId: RoutingId, file: File | Blob, filename: string): Promise<ChatMessage[]>;
   /** Where the veteran can download their filled draft 21-526EZ, or null
@@ -42,6 +45,12 @@ class MockApiClient implements ApiClient {
   async sendChatMessage(routingId: RoutingId, _text: string): Promise<ChatMessage[]> {
     const turn = getNextChatTurn(routingId);
     return delay(turn, MOCK_LATENCY_MS + 300);
+  }
+
+  async getMessages(_routingId: RoutingId): Promise<ChatMessage[]> {
+    // The mock has no server-side transcript; the caller falls back to
+    // running a turn, which is how it always behaved.
+    return delay([], 0);
   }
 
   async uploadDocument(

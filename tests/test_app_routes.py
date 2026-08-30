@@ -146,3 +146,29 @@ def test_the_veteran_can_download_their_filled_526ez(client):
 
 def test_downloading_a_form_for_an_unknown_claim_is_a_404(client):
     assert client.get("/api/app/claims/route-never-seen/526ez").status_code == 404
+
+
+def test_an_empty_send_does_not_reach_the_extractor(client, monkeypatch):
+    """Opening the chat used to post an empty message, which spent a model
+    call reading "" and at some steps was taken as a decision to skip."""
+    from src import intake_chat
+
+    called = {"n": 0}
+
+    def counted(session, text):
+        called["n"] += 1
+        return "should not happen"
+
+    monkeypatch.setattr(intake_chat, "apply_answer", counted)
+    client.get(f"/api/app/claims/{ROUTING_ID}")
+
+    response = client.post(f"/api/app/claims/{ROUTING_ID}/chat", json={"text": "   "})
+    assert response.status_code == 200
+    assert called["n"] == 0
+
+
+def test_the_opening_question_can_be_read_without_posting(client):
+    client.get(f"/api/app/claims/{ROUTING_ID}")
+    messages = client.get(f"/api/app/claims/{ROUTING_ID}/messages").json()["messages"]
+
+    assert any(m["type"] == "ai-text" for m in messages), "no opening question to read"
