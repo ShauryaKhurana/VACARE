@@ -49,21 +49,29 @@ def test_a_chat_turn_returns_only_that_turn(client, monkeypatch):
     body = client.post(f"/api/app/claims/{ROUTING_ID}/chat",
                        json={"text": "My ears ring"}).json()
     texts = [m.get("text") for m in body["messages"]]
-    assert "My ears ring" in texts
+
+    # The caller's own message is not echoed: the client rendered it the
+    # moment it was typed, so returning it drew the bubble twice.
+    assert "My ears ring" not in texts
     assert "Got it." in texts
+
+    # It is still in the transcript, which is what a resume reads.
+    transcript = client.get(f"/api/app/claims/{ROUTING_ID}/messages").json()["messages"]
+    assert any(m.get("text") == "My ears ring" for m in transcript)
 
 
 def test_the_veteran_turn_is_recorded_even_if_the_handler_forgets(client, monkeypatch):
-    """The API must not lose the user's own message to a handler change."""
+    """The transcript must not lose the user's own message to a handler change."""
     from src import intake_chat
 
     monkeypatch.setattr(intake_chat, "apply_answer",
                         lambda session, text: "Got it.")   # deliberately silent
     client.get(f"/api/app/claims/{ROUTING_ID}")
-    body = client.post(f"/api/app/claims/{ROUTING_ID}/chat",
-                       json={"text": "My ears ring"}).json()
+    client.post(f"/api/app/claims/{ROUTING_ID}/chat", json={"text": "My ears ring"})
+
+    transcript = client.get(f"/api/app/claims/{ROUTING_ID}/messages").json()["messages"]
     assert any(m["type"] == "veteran-text" and m["text"] == "My ears ring"
-               for m in body["messages"])
+               for m in transcript)
 
 
 def test_confirm_moves_the_claim_into_vso_review(client):

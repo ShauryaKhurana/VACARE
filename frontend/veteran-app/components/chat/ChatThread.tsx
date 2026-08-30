@@ -347,7 +347,13 @@ export function ChatThread() {
                         <DocumentUploadCard
                           key={message.id}
                           prompt={message.prompt}
-                          onParsed={() => void advance()}
+                          routingId={routingId ?? ""}
+                          onUploaded={(turn) => {
+                            markConversationStarted();
+                            setMessages((prev) => [...prev, ...turn]);
+                            setStepsDone((n) => Math.max(n, 1));
+                          }}
+                          onSkip={() => void advance()}
                         />
                       );
                     case "confirmation-card":
@@ -484,12 +490,28 @@ export function ChatThread() {
       </div>
       <ChatInputBar
         onSend={(text) => void (claimSubmitted ? sendRelayMessage(text) : advance(text))}
-        onAttach={(fileName) => {
+        onAttach={async (file, fileName) => {
+          if (!routingId) return;
           markConversationStarted();
-          setMessages((prev) => [
-            ...prev,
-            { id: `veteran-attach-${Date.now()}`, type: "veteran-text", text: `Attached: ${fileName}` },
-          ]);
+          setLoading(true);
+          try {
+            const turn = await apiClient.uploadDocument(routingId, file, fileName);
+            setMessages((prev) => [...prev, ...turn]);
+          } catch (error) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `attach-failed-${Date.now()}`,
+                type: "ai-text",
+                text:
+                  error instanceof Error && error.message
+                    ? `I couldn't read ${fileName}: ${error.message}`
+                    : `I couldn't read ${fileName}. Please try again.`,
+              },
+            ]);
+          } finally {
+            setLoading(false);
+          }
         }}
         disabled={loading}
       />

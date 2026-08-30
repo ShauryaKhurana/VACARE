@@ -75,5 +75,17 @@ export async function prepareCapturedFile(file: File): Promise<CompressedImage> 
   if (await isHeicFile(file)) {
     return { blob: file, originalFormat: "heic", compressedClientSide: false };
   }
+  // A DD-214 is usually a PDF, not a photo. createImageBitmap throws on one,
+  // which previously surfaced to the veteran as "that photo didn't come
+  // through clearly" for a perfectly good document.
+  if (isPdf(file)) {
+    return { blob: file, originalFormat: "application/pdf", compressedClientSide: false };
+  }
   return compressImage(file);
+}
+
+/** MIME type or extension is enough here: unlike the HEIC check, a wrong
+ *  answer costs a needless compression attempt, not a corrupted upload. */
+export function isPdf(file: File): boolean {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }

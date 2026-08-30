@@ -9,6 +9,8 @@ import { HttpApiClient } from "@/lib/api/http";
 export interface ApiClient {
   getClaim(routingId: RoutingId): Promise<Claim>;
   sendChatMessage(routingId: RoutingId, text: string): Promise<ChatMessage[]>;
+  /** Sends a captured document and returns the turn it produced. */
+  uploadDocument(routingId: RoutingId, file: File | Blob, filename: string): Promise<ChatMessage[]>;
   confirmClaimDraft(routingId: RoutingId): Promise<{ vso: VsoInfo }>;
   deleteMyData(routingId: RoutingId): Promise<void>;
 }
@@ -37,6 +39,22 @@ class MockApiClient implements ApiClient {
   async sendChatMessage(routingId: RoutingId, _text: string): Promise<ChatMessage[]> {
     const turn = getNextChatTurn(routingId);
     return delay(turn, MOCK_LATENCY_MS + 300);
+  }
+
+  async uploadDocument(
+    routingId: RoutingId,
+    _file: File | Blob,
+    filename: string,
+  ): Promise<ChatMessage[]> {
+    // No backend to parse it, so acknowledge the file and advance the script.
+    const turn = getNextChatTurn(routingId);
+    return delay(
+      [
+        { id: `upload-${Date.now()}`, type: "veteran-text", text: `[uploaded ${filename}]` },
+        ...turn,
+      ] as ChatMessage[],
+      MOCK_LATENCY_MS + 300,
+    );
   }
 
   async confirmClaimDraft(_routingId: RoutingId): Promise<{ vso: VsoInfo }> {

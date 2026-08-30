@@ -66,8 +66,16 @@ describe("HttpApiClient against the live backend", () => {
       expect(MESSAGE_TYPES.has(message.type)).toBe(true);
       expect(message.id).toBeTruthy();
     }
-    expect(messages.some((m) => m.type === "veteran-text")).toBe(true);
+    // The veteran's own message is NOT echoed back: the client already
+    // rendered it optimistically, and returning it produced a duplicate.
+    expect(messages.some((m) => m.type === "veteran-text")).toBe(false);
+    expect(messages.some((m) => m.type === "ai-text")).toBe(true);
   }, 60_000);
+
+  // Upload is deliberately not tested here. jsdom's FormData does not
+  // serialise through undici's fetch, so a multipart POST arrives with no
+  // file and the server answers 422 — an artefact of the test environment,
+  // not of the code. e2e/upload.spec.ts covers it in a real browser.
 
   it("confirms a draft and hands back a vso object", async () => {
     if (!backendUp) return;

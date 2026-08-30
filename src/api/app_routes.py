@@ -133,7 +133,19 @@ def send_chat_message(routing_id: str, body: ChatRequest) -> Dict[str, Any]:
         _say_once(session, question.text)
 
     _persist(session)
-    return {"messages": app_bridge.chat_messages(session, since=before)}
+    # Drop the echo of what the caller just sent: clients render their own
+    # message immediately, so returning it produced a duplicate bubble. The
+    # full transcript endpoint still includes it, for resuming elsewhere.
+    messages = app_bridge.chat_messages(session, since=before)
+    return {"messages": _without_echo(messages, body.text)}
+
+
+def _without_echo(messages: list, text: str) -> list:
+    wanted = text.strip()
+    for index, message in enumerate(messages):
+        if message.get("type") == "veteran-text" and message.get("text") == wanted:
+            return messages[:index] + messages[index + 1:]
+    return messages
 
 
 @router.post("/claims/{routing_id}/documents")
