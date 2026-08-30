@@ -48,7 +48,16 @@ const QUICK_EDIT_TARGETS = ["Service info", "Conditions", "Documents", "Statemen
 const REVIEW_HANDOFF_MARKER = "Review & confirm";
 
 /**
- * Appends only messages the thread does not already hold.
+ * Affordances for the *current* question rather than a record of what was
+ * said. The server re-sends them every turn the question stays open, so they
+ * are replaced, never accumulated -- otherwise a veteran who uploads twice
+ * ends up looking at a stack of identical upload cards.
+ */
+const TRANSIENT_TYPES = new Set<ChatMessage["type"]>(["document-upload", "quick-replies"]);
+
+/**
+ * Merges a turn into the thread: drops any superseded affordance, then
+ * appends only messages the thread does not already hold.
  *
  * The thread merges three sources — messages restored from localStorage, the
  * turn returned by the server, and the optimistic bubble drawn the instant
@@ -62,7 +71,15 @@ function appendUnique(previous: ChatMessage[], incoming: ChatMessage[]): ChatMes
     seen.add(message.id);
     return true;
   });
-  return fresh.length > 0 ? [...previous, ...fresh] : previous;
+  if (fresh.length === 0) return previous;
+
+  // Only clear old affordances when the turn brings replacements; a turn of
+  // plain text should leave the veteran's current upload card alone.
+  const kept = fresh.some((message) => TRANSIENT_TYPES.has(message.type))
+    ? previous.filter((message) => !TRANSIENT_TYPES.has(message.type))
+    : previous;
+
+  return [...kept, ...fresh];
 }
 
 export function ChatThread() {
