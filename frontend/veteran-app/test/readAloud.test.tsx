@@ -2,34 +2,58 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
-import { speak, stopSpeaking, speechSupported, stripForSpeech } from "@/lib/speech";
+import {
+  speak,
+  stopSpeaking,
+  speechSupported,
+  stripForSpeech,
+  splitSentences,
+  pickVoice,
+} from "@/lib/speech";
 
 /** jsdom ships no speechSynthesis at all, so every test that expects the
  *  feature to be present has to install one. That absence is itself worth
  *  testing -- see "hides the control" below. */
-function installSpeechSynthesis() {
+type FakeVoice = { name: string; lang: string; localService: boolean };
+
+function installSpeechSynthesis(voices: FakeVoice[] = []) {
   const spoken: string[] = [];
+  const used: (FakeVoice | undefined)[] = [];
   const cancel = vi.fn();
   Object.defineProperty(window, "speechSynthesis", {
     configurable: true,
     writable: true,
     value: {
       cancel,
-      speak: (u: { text: string }) => spoken.push(u.text),
+      getVoices: () => voices,
+      speak: (u: { text: string; voice?: FakeVoice }) => {
+        spoken.push(u.text);
+        used.push(u.voice);
+      },
     },
   });
   class FakeUtterance {
     text: string;
     rate = 1;
     lang = "";
+    voice: FakeVoice | undefined;
     constructor(text: string) {
       this.text = text;
     }
   }
   (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance =
     FakeUtterance;
-  return { spoken, cancel };
+  return { spoken, used, cancel };
 }
+
+const MACOS_DEFAULTS: FakeVoice[] = [
+  { name: "Samantha", lang: "en-US", localService: true },
+  { name: "Bubbles", lang: "en-US", localService: true },
+  { name: "Daniel", lang: "en-GB", localService: true },
+  { name: "Sandy (English (United States))", lang: "en-US", localService: true },
+  { name: "Shelley (English (United States))", lang: "en-US", localService: true },
+  { name: "Anna", lang: "de-DE", localService: true },
+];
 
 function removeSpeechSynthesis() {
   Reflect.deleteProperty(window, "speechSynthesis");
@@ -124,5 +148,72 @@ describe("read-aloud toggle in the composer", () => {
 
     expect(cancel).toHaveBeenCalled();
     expect(useAccessibilityStore.getState().readAloud).toBe(false);
+  });
+});
+
+describe("voice selection", () => {
+  it("does not settle for the OS default when a warmer voice is installed", () => {
+    // macOS defaults to Samantha, the voice that prompted this change.
+    const { used } = installSpeechSynthesis(MACOS_DEFAULTS);
+    speak("Hello.");
+    expect(used[0]?.name).toBe("Sandy (English (United States))");
+  });
+
+  it("prefers a neural voice over anything local when one is present", () => {
+    const { used } = installSpeechSynthesis([
+      ...MACOS_DEFAULTS,
+      { name: "Ava (Premium)", lang: "en-US", localService: true },
+    ]);
+    speak("Hello.");
+    expect(used[0]?.name).toBe("Ava (Premium)");
+  });
+
+  it("never picks a novelty voice, even though they are English", () => {
+    const { used } = installSpeechSynthesis([
+      { name: "Bubbles", lang: "en-US", localService: true },
+      { name: "Zarvox", lang: "en-US", localService: true },
+      { name: "Bad News", lang: "en-US", localService: true },
+      { name: "Karen", lang: "en-AU", localService: true },
+    ]);
+    speak("Hello.");
+    expect(used[0]?.name).toBe("Karen");
+  });
+
+  it("never picks a voice in another language", () => {
+    const { used } = installSpeechSynthesis([
+      { name: "Anna", lang: "de-DE", localService: true },
+      { name: "Amelie", lang: "fr-CA", localService: true },
+    ]);
+    speak("Hello.");
+    expect(used[0]).toBeUndefined();
+  });
+
+  it("returns nothing while the voice list is still loading", () => {
+    // Chrome hands back an empty list on the first call and fills it in later.
+    installSpeechSynthesis([]);
+    expect(pickVoice()).toBeNull();
+  });
+
+  it("still speaks when the browser exposes no voice list at all", () => {
+    const { spoken } = installSpeechSynthesis();
+    Reflect.deleteProperty(window.speechSynthesis as object, "getVoices");
+    speak("Hello.");
+    expect(spoken).toEqual(["Hello."]);
+  });
+});
+
+describe("sentence pacing", () => {
+  it("queues each sentence separately so the pauses land", () => {
+    const { spoken } = installSpeechSynthesis(MACOS_DEFAULTS);
+    speak("Saved your phone number. What's your mailing address? The VA sends letters there.");
+    expect(spoken).toEqual([
+      "Saved your phone number.",
+      "What's your mailing address?",
+      "The VA sends letters there.",
+    ]);
+  });
+
+  it("keeps a fragment with no sentence end as one utterance", () => {
+    expect(splitSentences("no punctuation here")).toEqual(["no punctuation here"]);
   });
 });
