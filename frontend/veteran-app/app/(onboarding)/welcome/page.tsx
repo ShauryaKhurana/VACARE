@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,7 +10,10 @@ import {
   IconArrowRight,
 } from "@tabler/icons-react";
 import { AccentButton } from "@/components/shared/AccentButton";
+import { PageTransition } from "@/components/shared/PageTransition";
+import { Spinner } from "@/components/shared/Spinner";
 import { useSessionStore } from "@/lib/store/sessionStore";
+import { chatMessagesKey } from "@/lib/api/mock/chatScript";
 import { cn } from "@/lib/utils";
 
 /**
@@ -42,6 +45,7 @@ const CARDS = [
 
 export default function WelcomePage() {
   const [step, setStep] = useState(0);
+  const [resuming, setResuming] = useState(false);
   const router = useRouter();
   const startSession = useSessionStore((s) => s.startSession);
 
@@ -49,26 +53,63 @@ export default function WelcomePage() {
   const card = CARDS[step];
   const Icon = card.icon;
 
+  useEffect(() => {
+    if (!resuming) return;
+    const t = setTimeout(() => router.push("/talk"), 900);
+    return () => clearTimeout(t);
+  }, [resuming, router]);
+
   function handleContinue() {
-    if (isLastCard) {
-      startSession();
-      router.push("/talk");
-    } else {
+    if (!isLastCard) {
       setStep((s) => s + 1);
+      return;
     }
+
+    // A veteran can land back on Welcome (bookmark, browser back, a fresh
+    // tab) with a dig already in progress from an earlier visit -- "Let's
+    // get started" shouldn't silently drop them into that same conversation
+    // with no acknowledgment that anything carried over, as if it were day
+    // one again.
+    const existingRoutingId = useSessionStore.getState().routingId;
+    const isResuming =
+      !!existingRoutingId &&
+      typeof window !== "undefined" &&
+      !!window.localStorage.getItem(chatMessagesKey(existingRoutingId));
+
+    startSession();
+    if (isResuming) {
+      setResuming(true);
+    } else {
+      router.push("/talk");
+    }
+  }
+
+  if (resuming) {
+    return (
+      <PageTransition
+        transitionKey="resuming"
+        className="mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center md:max-w-lg lg:max-w-xl"
+      >
+        <Spinner label="Picking up where you left off" />
+        <p className="text-sm text-text-secondary">Picking up right where you left off…</p>
+      </PageTransition>
+    );
   }
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col justify-between px-6 py-10 md:max-w-lg lg:max-w-xl">
       <div />
 
-      <div className="flex flex-col items-center text-center">
+      <PageTransition
+        transitionKey={String(step)}
+        className="flex flex-col items-center text-center"
+      >
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
           <Icon size={32} aria-hidden="true" />
         </div>
         <h1 className="text-2xl md:text-3xl font-medium text-text-primary">{card.heading}</h1>
         <p className="mt-3 text-base text-text-secondary">{card.body}</p>
-      </div>
+      </PageTransition>
 
       <div className="flex flex-col items-center gap-5">
         <div className="flex gap-1.5" aria-hidden="true">

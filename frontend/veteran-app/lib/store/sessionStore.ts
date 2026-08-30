@@ -26,6 +26,14 @@ interface SessionState {
    * and any change goes to the VSO as a flagged request, not a silent edit.
    */
   claimSubmitted: boolean;
+  /**
+   * True forever once a claim has ever been submitted, even across a later
+   * "Start over" (which resets claimSubmitted so Talk drops back into an
+   * editable dig). Nav chrome's "My claim"/"You" tabs key off this, not
+   * claimSubmitted -- a veteran who already has a case with a VSO should
+   * never lose access to it just because they're redoing a new one.
+   */
+  hasEverSubmitted: boolean;
   startSession: () => void;
   completeOnboarding: () => void;
   markConversationStarted: () => void;
@@ -51,13 +59,14 @@ export const useSessionStore = create<SessionState>()(
       onboardingComplete: false,
       conversationStarted: false,
       claimSubmitted: false,
+      hasEverSubmitted: false,
       startSession: () =>
         set((state) => ({
           routingId: state.routingId ?? generateRoutingId(),
         })),
       completeOnboarding: () => set({ onboardingComplete: true }),
       markConversationStarted: () => set({ conversationStarted: true }),
-      submitClaim: () => set({ claimSubmitted: true }),
+      submitClaim: () => set({ claimSubmitted: true, hasEverSubmitted: true }),
       // Chat/script storage cleanup is the caller's job (via apiClient.deleteMyData,
       // same as the full delete-my-data flow reuses) -- this store only owns the
       // session flags, matching clearSession's existing division of responsibility.
@@ -71,6 +80,7 @@ export const useSessionStore = create<SessionState>()(
           onboardingComplete: true,
           conversationStarted: true,
           claimSubmitted: true,
+          hasEverSubmitted: true,
         }),
       clearSession: () =>
         set({
@@ -78,6 +88,7 @@ export const useSessionStore = create<SessionState>()(
           onboardingComplete: false,
           conversationStarted: false,
           claimSubmitted: false,
+          hasEverSubmitted: false,
         }),
     }),
     { name: "veteran-app-session" },

@@ -4,16 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_TABS } from "@/components/nav/navTabs";
+import { useSessionStore } from "@/lib/store/sessionStore";
 
 export function BottomNav() {
   const pathname = usePathname();
+  const hasEverSubmitted = useSessionStore((s) => s.hasEverSubmitted);
+  const tabs = NAV_TABS.filter((tab) => !tab.requiresSubmission || hasEverSubmitted);
 
   return (
     <nav
       aria-label="Primary"
       className="sticky bottom-0 z-10 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {NAV_TABS.map(({ href, label, icon: Icon }) => {
+      {tabs.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

@@ -67,6 +67,17 @@
   --va-warning: #b8862e;
   --va-danger: #b4483b;
   --va-computed: #6b6fa0;
+
+  /*
+   * A faint, hand-drawn-feeling contour pattern behind the whole app (body's
+   * own background-image, not an element) -- opacity is baked into the SVG
+   * itself at 6% so it can never accidentally get painted stronger by a
+   * later utility class. Colors inside a data-URI can't reference CSS
+   * custom properties, so this is a literal --va-accent hex, not var().
+   * Surfaces/cards throughout the app are opaque, so this only ever shows
+   * in the negative space around them, never behind text.
+   */
+  --va-bg-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='none' stroke='%232b6e63' stroke-width='1.4' opacity='0.06'%3E%3Cpath d='M-20 40 Q 40 0 100 40 T 220 40 T 340 40'/%3E%3Cpath d='M-20 120 Q 40 80 100 120 T 220 120 T 340 120'/%3E%3Cpath d='M-20 200 Q 40 160 100 200 T 220 200 T 340 200'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /*
@@ -90,6 +101,8 @@
   body {
     @apply bg-background text-text-primary;
     line-height: 1.65;
+    background-image: var(--va-bg-pattern);
+    background-repeat: repeat;
   }
   html {
     @apply font-sans;
@@ -113,6 +126,7 @@
    on didn't actually raise the "Computed" tag's or the active nav row's
    contrast at all. */
 html.va-high-contrast {
+  --va-bg-pattern: none;
   --va-background: #ffffff;
   --va-surface: #ffffff;
   --va-border: #000000;

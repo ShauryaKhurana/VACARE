@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SignInCard } from "@/components/onboarding/SignInCard";
+import { PageTransition } from "@/components/shared/PageTransition";
+import { Spinner } from "@/components/shared/Spinner";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import { seedReturningVeteranWelcome } from "@/lib/api/mock/chatScript";
 import { claimInDevelopment } from "@/lib/api/mock/fixtures";
@@ -31,25 +33,21 @@ export default function SignInPage() {
     return () => clearTimeout(t);
   }, [step, signInReturningVeteran, router]);
 
-  if (step === "signing-in") {
-    return (
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center md:max-w-2xl">
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-accent"
-          role="status"
-          aria-label="Signing you in"
-        />
-        <p className="text-sm text-text-secondary">Signing you in…</p>
-      </div>
-    );
-  }
-
   return (
-    <SignInCard
-      heading="Sign in to pick up where you left off"
-      description="VA.gov verifies your identity through Login.gov or ID.me -- this preview simulates that step, so nothing here is a real sign-in. Any email works, and nothing is stored."
-      submitLabel="Sign in"
-      onSubmit={() => setStep("signing-in")}
-    />
+    <PageTransition transitionKey={step} className="flex min-h-0 flex-1 flex-col">
+      {step === "signing-in" ? (
+        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center md:max-w-2xl">
+          <Spinner label="Signing you in" />
+          <p className="text-sm text-text-secondary">Signing you in…</p>
+        </div>
+      ) : (
+        <SignInCard
+          heading="Sign in to pick up where you left off"
+          description="VA.gov verifies your identity through Login.gov or ID.me -- this preview simulates that step, so nothing here is a real sign-in. Any email works, and nothing is stored."
+          submitLabel="Sign in"
+          onSubmit={() => setStep("signing-in")}
+        />
+      )}
+    </PageTransition>
   );
 }

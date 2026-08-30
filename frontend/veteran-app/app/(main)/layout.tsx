@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BottomNav } from "@/components/nav/BottomNav";
 import { SideNav } from "@/components/nav/SideNav";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { PageTransition } from "@/components/shared/PageTransition";
 import { useSessionStore } from "@/lib/store/sessionStore";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -44,7 +45,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           id="main-content"
           className="flex min-h-0 flex-1 flex-col overflow-hidden md:bg-app-wash"
         >
-          {children}
+          <PageTransition className="flex min-h-0 flex-1 flex-col">{children}</PageTransition>
         </main>
         {showChrome && <BottomNav />}
       </div>

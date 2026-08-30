@@ -17,7 +17,7 @@ export function PageContainer({
     <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 lg:px-12">
       <div
         className={cn(
-          "mx-auto flex max-w-xl flex-col gap-4 pb-6 md:max-w-2xl lg:max-w-4xl",
+          "mx-auto flex max-w-xl flex-col gap-4 pb-6 animate-in fade-in duration-300 md:max-w-2xl lg:max-w-4xl",
           className,
         )}
       >
