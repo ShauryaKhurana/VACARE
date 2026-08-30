@@ -20,10 +20,14 @@ interface AccessibilityState {
   textScale: number;
   highContrast: boolean;
   voiceInputDefault: boolean;
+  /** Read the assistant's messages aloud as they arrive. The counterpart to
+   *  voice input: one lets the veteran talk, the other lets them listen. */
+  readAloud: boolean;
   notificationChannels: Record<NotificationChannel, boolean>;
   setTextScale: (scale: number) => void;
   setHighContrast: (enabled: boolean) => void;
   setVoiceInputDefault: (enabled: boolean) => void;
+  setReadAloud: (enabled: boolean) => void;
   toggleNotificationChannel: (channel: NotificationChannel) => void;
 }
 
@@ -33,10 +37,12 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       textScale: TEXT_SCALE_DEFAULT,
       highContrast: false,
       voiceInputDefault: false,
+      readAloud: false,
       notificationChannels: { push: true, sms: true, email: true },
       setTextScale: (scale) => set({ textScale: scale }),
       setHighContrast: (enabled) => set({ highContrast: enabled }),
       setVoiceInputDefault: (enabled) => set({ voiceInputDefault: enabled }),
+      setReadAloud: (enabled) => set({ readAloud: enabled }),
       toggleNotificationChannel: (channel) =>
         set((state) => ({
           notificationChannels: {

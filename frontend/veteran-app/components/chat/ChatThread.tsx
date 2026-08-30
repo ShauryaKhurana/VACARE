@@ -25,6 +25,8 @@ import { ChatInputBar, type ChatInputBarHandle } from "@/components/chat/ChatInp
 import { RestartClaimDialog } from "@/components/chat/RestartClaimDialog";
 import { StepTracker } from "@/components/shared/StepTracker";
 import { AccentButton } from "@/components/shared/AccentButton";
+import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
+import { speak, stopSpeaking } from "@/lib/speech";
 
 const STARTER_PROMPTS = [
   "I'm not sure where to start",
@@ -121,6 +123,25 @@ function pruneStaleAffordances(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
+/**
+ * What the assistant just said, as one spoken paragraph.
+ *
+ * Cards are included by their prompt text, not their contents: a veteran
+ * listening rather than reading still needs to hear "upload your DD-214",
+ * but reading a confirmation table aloud field by field is worse than
+ * useless -- they can see it, and it is the one thing they must check with
+ * their eyes anyway.
+ */
+function speakableText(messages: ChatMessage[]): string {
+  const parts: string[] = [];
+  for (const message of messages) {
+    if (message.type === "ai-text") parts.push(message.text);
+    else if (message.type === "document-upload") parts.push(message.prompt);
+    else if (message.type === "statement-builder") parts.push(message.prompt);
+  }
+  return parts.join(" ");
+}
+
 export function ChatThread() {
   const routingId = useSessionStore((s) => s.routingId);
   const startSession = useSessionStore((s) => s.startSession);
@@ -149,6 +170,11 @@ export function ChatThread() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<ChatInputBarHandle>(null);
+  const readAloud = useAccessibilityStore((s) => s.readAloud);
+  /** How far into the thread we have already read. Restored history is
+   *  marked as spoken without speaking it -- reopening the tab should not
+   *  replay the whole conversation from the top. */
+  const spokenUpTo = useRef(0);
 
   useEffect(() => {
     if (!routingId) startSession();
@@ -168,6 +194,9 @@ export function ChatThread() {
           // mismatch against the server-rendered (empty) thread.
           const restored = pruneStaleAffordances(appendUnique([], parsed));
           setMessages(restored);
+          // Restored history is already-heard history. Without this, opening
+          // the tab with read-aloud on replays the entire conversation.
+          spokenUpTo.current = restored.length;
           setShowResumeBanner(true);
           if (restored.length > 1) markConversationStarted();
           // Progress has to come back with the conversation, or the rail and
@@ -213,6 +242,25 @@ export function ChatThread() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    // Everything already on screen when read-aloud is off counts as read, so
+    // switching it on mid-conversation starts from the next answer rather
+    // than narrating the backlog.
+    if (!readAloud) {
+      spokenUpTo.current = messages.length;
+      return;
+    }
+    if (messages.length <= spokenUpTo.current) return;
+
+    const fresh = messages.slice(spokenUpTo.current);
+    spokenUpTo.current = messages.length;
+    speak(speakableText(fresh));
+  }, [messages, readAloud]);
+
+  // Leaving the page has to stop the voice: speechSynthesis belongs to the
+  // browser, not the component, and outlives an unmount otherwise.
+  useEffect(() => stopSpeaking, []);
 
   useEffect(() => {
     const el = scrollAreaRef.current;
