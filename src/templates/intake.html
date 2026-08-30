@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "partials/itf_help.html" import button as itf_help_btn, modal as itf_help_modal %}
+{% from "partials/poa_help.html" import button as poa_help_btn, modal as poa_help_modal %}
 {% block content %}
 <h1>Intake</h1>
 <p class="muted">Plain-language questions. The answers decide which lane you are in and which forms
@@ -55,8 +57,10 @@ supplemental from a higher-level review. They all sound like "more money for my 
 
 <h3>Dates that start their own clocks</h3>
 <div class="grid2">
-  <div><label>Intent to File (21-0966) filed on</label><input type="date" name="itf_filed_on"></div>
-  <div><label>POA (21-22) filed on</label><input type="date" name="poa_filed_on"></div>
+  <div><div class="label-with-help"><label for="itf_filed_on">Back-pay start date (optional)</label>{{ itf_help_btn() }}</div>
+  <input type="date" name="itf_filed_on" id="itf_filed_on"></div>
+  <div><div class="label-with-help"><label for="poa_filed_on">VSO appointment date (optional)</label>{{ poa_help_btn() }}</div>
+  <input type="date" name="poa_filed_on" id="poa_filed_on"></div>
   <div><label>Records release (21-4142) signed on</label><input type="date" name="records_auth_signed_on"></div>
 </div>
 
@@ -102,4 +106,6 @@ supplemental from a higher-level review. They all sound like "more money for my 
 
 <p style="margin-top:26px"><button type="submit">See my lane and checklist</button></p>
 </form>
+{{ itf_help_modal() }}
+{{ poa_help_modal() }}
 {% endblock %}

@@ -1,0 +1,102 @@
+{# Post-submission tracker + decision letter (M9-lite) #}
+<style>
+  .tracker-steps {
+    display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 8px; padding:0; list-style:none;
+  }
+  .tracker-step {
+    flex:1 1 140px; min-width:120px; padding:10px 12px; border:1.6px solid var(--rule);
+    border-radius:6px; background:#fff; font-size:13px;
+  }
+  .tracker-step.done { border-color:var(--ok); background:#f0faf4; }
+  .tracker-step.current { border-color:var(--you); background:#eef3fc; box-shadow:0 0 0 1px var(--you); }
+  .tracker-step .step-label { font-weight:700; display:block; margin-bottom:4px; }
+  .tracker-step .step-detail { color:var(--muted); font-size:12px; line-height:1.35; }
+  .deadline-row {
+    display:flex; justify-content:space-between; gap:12px; padding:8px 0;
+    border-bottom:1px solid var(--rule); font-size:14px;
+  }
+  .deadline-row:last-child { border-bottom:none; }
+  .deadline-urgent { color:var(--lock); font-weight:700; }
+  .deadline-soon { color:#8a5a12; font-weight:600; }
+  .appeal-card {
+    border:1.6px solid var(--rule); border-radius:6px; padding:12px 14px; margin-bottom:10px;
+    background:#fff;
+  }
+  .appeal-card.recommended { border-color:var(--you); background:#eef3fc; }
+  .appeal-card .form-no { font-family:"Courier Prime",monospace; font-size:12px; color:var(--muted); }
+</style>
+
+<h2>{{ tracker_title }}</h2>
+<p class="muted" style="font-size:14px;margin-top:-4px">{{ tracker_explainer }}</p>
+
+<ol class="tracker-steps">
+  {% for step in tracker.timeline %}
+  <li class="tracker-step {{ step.state }}">
+    <span class="step-label">{{ step.label }}</span>
+    <span class="step-detail">{{ step.detail }}</span>
+  </li>
+  {% endfor %}
+</ol>
+
+{% if tracker.submitted_on and not tracker.decision.has_decision %}
+<div class="banner" style="border-left-color:var(--you);margin-top:12px">
+  <b>Submitted {{ tracker.submitted_on }}</b>
+  {% if tracker.va_status %} · VA status: {{ tracker.va_status }}{% endif %}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">
+    When your decision letter arrives, upload it below and we'll read the outcome and any deadlines.
+  </p>
+</div>
+{% endif %}
+
+{% if tracker.decision.has_decision %}
+<h2 style="margin-top:28px">{{ decision_title }}</h2>
+<div class="banner" style="border-left-color:{% if tracker.decision.outcome in ['denied','partial','decreased','mixed'] %}#b3261e{% elif tracker.decision.outcome in ['granted','increased'] %}#1e6f45{% else %}var(--you){% endif %}">
+  <b>{{ tracker.decision.outcome_label }}</b>
+  {% if tracker.decision.decision_date %}
+  <span class="muted" style="font-size:13px"> · {{ tracker.decision.decision_date }}</span>
+  {% endif %}
+  <p style="margin:8px 0 0;font-size:14px">{{ tracker.decision.message }}</p>
+  {% if tracker.decision.granted %}
+  <p class="muted" style="font-size:13px;margin:8px 0 0"><b>Granted:</b> {{ tracker.decision.granted|join(', ') }}</p>
+  {% endif %}
+  {% if tracker.decision.denied %}
+  <p class="muted" style="font-size:13px;margin:4px 0 0"><b>Denied or deferred:</b> {{ tracker.decision.denied|join(', ') }}</p>
+  {% endif %}
+</div>
+{% elif tracker.submitted_on %}
+<h2 style="margin-top:28px">{{ decision_title }}</h2>
+<div class="wash" style="margin-top:8px">
+  <p style="margin:0 0 12px;font-size:14px">Upload your VA decision letter (PDF) and we'll read the date and outcome.</p>
+  <form method="post" action="/claim/{{ claim.id }}/documents" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg" required>
+    <button type="submit" style="margin-top:8px">Upload decision letter</button>
+  </form>
+  <p class="muted" style="font-size:13px;margin:12px 0 0">No file handy? Enter the date from the letter:</p>
+  <form method="post" action="/claim/{{ claim.id }}/decision-date" style="margin-top:8px">
+    <input type="date" name="decision_date" required>
+    <button type="submit" style="margin-top:8px">Save decision date</button>
+  </form>
+</div>
+{% endif %}
+
+{% if tracker.decision.has_decision and tracker.deadlines %}
+<h2 style="margin-top:28px">Deadlines running</h2>
+<div class="wash">
+  {% for d in tracker.deadlines %}
+  <div class="deadline-row">
+    <div>
+      <b>{{ d.label }}</b>
+      <div class="muted" style="font-size:13px">{{ d.detail }}</div>
+    </div>
+    <div class="{% if d.urgency == 'expired' or d.urgency == 'urgent' %}deadline-urgent{% elif d.urgency == 'soon' %}deadline-soon{% endif %}"
+         style="white-space:nowrap;font-size:13px;text-align:right">
+      Due {{ d.due }}<br>
+      {% if d.days_left < 0 %}<span class="deadline-urgent">Expired</span>
+      {% else %}<span>{{ d.days_left }} days left</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% include "partials/appeal_section.html" %}

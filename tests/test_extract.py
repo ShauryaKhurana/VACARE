@@ -10,7 +10,8 @@ from unittest.mock import patch
 import pytest
 
 from src import extract, gemini, intake_chat
-from src.gemini import Attachment
+from src.gemini import Attachment, GeminiError
+from src.models import ClaimStatus
 
 STORY_PAYLOAD = {
     "conditions": [
@@ -34,6 +35,86 @@ DD214_PAYLOAD = {
     "discharge_type": "honorable",
 }
 
+MEDICAL_RECORD_PAYLOAD = {
+    "document_type": "medical_record",
+    "confidence": "high",
+    "summary": "VA Durham progress note for Dana Reyes",
+    "first_name": "DANA",
+    "last_name": "REYES",
+    "date_of_birth": "1988-03-12",
+    "conditions": [
+        {
+            "name": "Tinnitus",
+            "current_symptoms": "Constant ringing in both ears, worse in quiet rooms",
+            "diagnosis": "H93.19 Tinnitus, bilateral, subjective",
+            "onset_date": "2011-04-01",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": True,
+        },
+        {
+            "name": "Sensorineural hearing loss",
+            "current_symptoms": "Hearing difficulty in both ears",
+            "diagnosis": "H90.3 Sensorineural hearing loss, bilateral",
+            "onset_date": "2011-04-01",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": True,
+        },
+        {
+            "name": "Low back pain",
+            "current_symptoms": "Chronic lumbar pain worsened by prolonged standing",
+            "diagnosis": "M54.50 Low back pain, unspecified",
+            "onset_date": "2007-06-01",
+            "started_in_service": True,
+            "worsened_in_service": True,
+            "currently_treated": True,
+        },
+    ],
+    "providers": [
+        "Dr. Elena Morales, MD - Primary Care, VA Durham",
+        "Dr. James Okonkwo, AuD - Audiology, VA Durham",
+        "Sarah Chen, DPT - Physical Therapy, VA Durham",
+    ],
+}
+
+SERVICE_TREATMENT_RECORD_PAYLOAD = {
+    "document_type": "service_treatment_record",
+    "confidence": "high",
+    "summary": "In-theater field medical encounter after IED blast, Kandahar 2011",
+    "first_name": "DANA",
+    "last_name": "REYES",
+    "date_of_birth": "1988-03-12",
+    "conditions": [
+        {
+            "name": "Tinnitus",
+            "current_symptoms": "Bilateral ear ringing after blast exposure",
+            "diagnosis": "Acoustic trauma / tinnitus, bilateral",
+            "onset_date": "2011-04-09",
+            "started_in_service": True,
+            "worsened_in_service": False,
+            "currently_treated": False,
+        },
+        {
+            "name": "Low back pain",
+            "current_symptoms": "Lumbar pain after vehicle impact",
+            "diagnosis": "Lumbar strain without radiculopathy",
+            "onset_date": "2011-04-09",
+            "started_in_service": True,
+            "worsened_in_service": True,
+            "currently_treated": False,
+        },
+    ],
+    "event": {
+        "title": "IED blast on mounted patrol",
+        "description": "Vehicle struck by roadside device in Kandahar Province.",
+        "event_date": "2011-04-09",
+        "location": "Kandahar, Afghanistan",
+        "witnesses": "SGT M. Alvarez",
+        "documented_in_service_records": True,
+    },
+}
+
 
 # --- parsing helpers -------------------------------------------------------
 
@@ -47,8 +128,10 @@ def test_parse_date_handles_partial_and_junk():
     assert extract.parse_date(None) is None
 
 
-def test_parse_date_rejects_the_future():
+def test_parse_date_rejects_the_future_unless_asked():
+    """A birth or onset date in the future is a misread; a separation date is not."""
     assert extract.parse_date("2099-01-01") is None
+    assert extract.parse_date("2099-01-01", allow_future=True) == date(2099, 1, 1)
 
 
 def test_names_from_documents_are_recased_but_typed_names_are_not():
@@ -134,9 +217,11 @@ def test_dd214_upload_fills_identity_so_it_is_never_asked(session):
     assert veteran.dob == date(1988, 3, 12)
     assert veteran.service_end == date(2013, 8, 30)
     assert veteran.discharge_type.value == "honorable"
-    assert "don't need to type" in receipt
-    # And the identity questions are now skipped entirely.
-    assert intake_chat.next_question(session).slot == intake_chat.Slot.RATING
+    assert "Thank you for uploading your DD-214" in receipt.message
+    assert "Dana Reyes" in receipt.detail
+    assert "Army" in receipt.detail or "army" in receipt.detail.lower()
+    # Identity is filled — next is contact info.
+    assert intake_chat.next_question(session).slot == intake_chat.Slot.CONTACT
 
 
 def test_uploaded_document_is_recorded_as_evidence(session):
@@ -155,18 +240,21 @@ def test_decision_letter_sets_the_date_and_the_lane(session):
          patch.object(gemini, "available", return_value=True):
         intake_chat.apply_document(session, Attachment("decision.pdf", b"%PDF-"))
     assert session.claim.context.decision_date == date(2026, 6, 1)
-    assert session.claim.context.disagrees_with_decision
+    assert session.claim.status == ClaimStatus.DECIDED
 
 
 def established_identity(session):
     """Fast-forward past the story and identity slots."""
     session.story_done = True
     session.identity_done = True
+    session.contact_done = True
     veteran = session.claim.veteran
     veteran.first_name, veteran.last_name = "Dana", "Reyes"
     veteran.dob = date(1988, 3, 12)
     veteran.service_start = date(2007, 6, 1)
     veteran.service_end = date(2013, 8, 30)
+    veteran.phone = "555-014-2277"
+    veteran.email = "dana@example.com"
     return session
 
 
@@ -211,9 +299,14 @@ live = pytest.mark.skipif(not gemini.available(), reason="no GEMINI_API_KEY conf
 
 @live
 def test_live_story_extraction_finds_two_conditions():
-    payload = extract.extract_from_story(
-        "IED blast in Kandahar 2011. Ears ring constantly and my lower back hurts when I stand."
-    )
+    try:
+        payload = extract.extract_from_story(
+            "IED blast in Kandahar 2011. Ears ring constantly and my lower back hurts when I stand."
+        )
+    except GeminiError as error:
+        if "HTTP 503" in str(error) or "HTTP 429" in str(error):
+            pytest.skip(f"Gemini temporarily unavailable: {error}")
+        raise
     names = " ".join(c["name"].lower() for c in extract.conditions_from(payload))
     assert "tinnitus" in names or "ring" in names
     assert "back" in names
@@ -225,7 +318,12 @@ def test_live_document_extraction_identifies_a_dd214():
             b"1. NAME: REYES, DANA\n2. BRANCH: ARMY\n5. DATE OF BIRTH: 1988 03 12\n"
             b"12a. DATE ENTERED AD: 2007 06 01\n12b. SEPARATION DATE: 2013 08 30\n"
             b"24. CHARACTER OF SERVICE: HONORABLE\n")
-    payload = extract.extract_from_document(Attachment("dd214.txt", text))
+    try:
+        payload = extract.extract_from_document(Attachment("dd214.txt", text))
+    except GeminiError as error:
+        if "HTTP 503" in str(error) or "HTTP 429" in str(error):
+            pytest.skip(f"Gemini temporarily unavailable: {error}")
+        raise
     assert payload["document_type"] == "dd214"
     fields = extract.veteran_fields_from(payload)
     assert fields["dob"] == date(1988, 3, 12)

@@ -58,3 +58,55 @@ def test_latest_claim_and_missing_claim(tmp_path):
         claim = build_sample_claim()
         store.save_claim(claim)
         assert store.latest_claim().id == claim.id
+
+
+def test_a_draft_claim_can_be_saved_before_a_birth_date_is_known(tmp_path):
+    """The chat builds a claim progressively, so dob may still be missing."""
+    from src.claim_intake import ClaimIntake
+    from src.models import Veteran
+
+    claim = ClaimIntake().start_claim(Veteran(first_name="No", last_name="Birthdate"))
+    with ClaimStore(tmp_path / "claims.db") as store:
+        store.save_claim(claim)
+        assert store.load_claim(claim.id).veteran.dob is None
+
+
+def test_a_database_from_the_old_schema_is_migrated_in_place(tmp_path):
+    """Older databases have NOT NULL on veterans.dob and no context_json."""
+    import sqlite3
+
+    from src.claim_intake import ClaimIntake
+    from src.models import Veteran
+
+    path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(path)
+    connection.executescript("""
+        CREATE TABLE veterans (id TEXT PRIMARY KEY, first_name TEXT NOT NULL,
+          last_name TEXT NOT NULL, dob TEXT NOT NULL, email TEXT, phone TEXT, branch TEXT,
+          service_start TEXT, service_end TEXT, discharge_type TEXT NOT NULL DEFAULT 'unknown');
+        CREATE TABLE claims (id TEXT PRIMARY KEY,
+          veteran_id TEXT NOT NULL REFERENCES veterans(id),
+          claim_type TEXT NOT NULL DEFAULT 'initial', status TEXT NOT NULL DEFAULT 'draft',
+          summary TEXT, created_on TEXT NOT NULL);
+        INSERT INTO veterans VALUES
+          ('v1','Old','Record','1980-01-01',NULL,NULL,'army',NULL,NULL,'honorable');
+        INSERT INTO claims VALUES ('c1','v1','initial','draft',NULL,'2026-01-01');
+    """)
+    connection.commit()
+    connection.close()
+
+    with ClaimStore(path) as store:
+        dob = [row for row in store.connection.execute("PRAGMA table_info(veterans)")
+               if row["name"] == "dob"][0]
+        assert not dob["notnull"]
+
+        # The old row survives, and the foreign key still points at `veterans`.
+        assert store.list_claims() == [("c1", "Old Record", "initial", "draft")]
+        schema = list(store.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name='claims'"))[0][0]
+        assert "REFERENCES veterans(" in schema
+
+        # And the new nullable column works alongside it.
+        claim = ClaimIntake().start_claim(Veteran(first_name="New", last_name="Record"))
+        store.save_claim(claim)
+        assert len(store.list_claims()) == 2

@@ -15,7 +15,8 @@
   * { box-sizing:border-box; }
   body { font-family:"Public Sans",-apple-system,sans-serif; color:var(--ink); background:var(--paper);
          margin:0; padding:32px 22px 80px; line-height:1.5; font-size:15.5px; }
-  .sheet { max-width:860px; margin:0 auto; }
+  .sheet { max-width:860px; margin:0 auto; min-height:calc(100vh - 112px);
+           display:flex; flex-direction:column; }
   a { color:var(--you); }
   .eyebrow { font-family:"Courier Prime",monospace; font-size:12px; letter-spacing:.14em;
              color:var(--muted); text-transform:uppercase; }
@@ -24,8 +25,20 @@
   h2 { font-family:"Archivo",sans-serif; font-weight:800; font-size:20px;
        border-bottom:3px solid var(--ink); padding-bottom:6px; margin:38px 0 12px; }
   h3 { font-size:15px; margin:22px 0 6px; }
-  nav { font-size:13px; margin-bottom:18px; font-family:"Courier Prime",monospace; }
-  nav a { margin-right:16px; }
+  nav { font-size:13px; margin-bottom:18px; font-family:"Courier Prime",monospace;
+        display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; }
+  nav a { margin-right:0; }
+  .dev-key-btn {
+    margin-left:auto; font-size:10px; font-weight:600; padding:3px 7px;
+    border-radius:4px; border:1px solid rgba(0,0,0,0.1); background:transparent;
+    color:#86868b; cursor:pointer; font-family:"Courier Prime",monospace;
+    letter-spacing:.04em; text-transform:uppercase; line-height:1.2;
+  }
+  .dev-key-btn:hover { border-color:#0071e3; color:#0071e3; background:rgba(0,113,227,0.04); }
+  .key-status { display:none; margin:-8px 0 14px; padding:10px 14px; font-size:13px;
+                border-left:4px solid var(--rule); background:var(--wash); border-radius:0 6px 6px 0; }
+  .key-status.ok { border-left-color:var(--ok); }
+  .key-status.bad { border-left-color:var(--lock); }
   .badge { display:inline-block; font-family:"Courier Prime",monospace; font-weight:700; font-size:11px;
            letter-spacing:.08em; padding:2px 7px 1px; border:1.6px solid currentColor; border-radius:3px;
            text-transform:uppercase; white-space:nowrap; background:#fff; }
@@ -73,21 +86,193 @@
   .ok .days { color:var(--ok); }
   .banner { background:var(--wash); border-left:4px solid var(--ink); padding:10px 14px;
             margin-bottom:18px; font-size:14px; }
-  .disclaimer { margin-top:44px; padding-top:14px; border-top:1px solid var(--rule);
-                font-size:12.5px; color:var(--muted); }
+  .lifecycle-badge {
+    display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;
+    font-family:"Courier Prime",monospace; letter-spacing:.04em; text-transform:uppercase;
+  }
+  .lifecycle-draft { background:#f0f0f0; color:var(--muted); }
+  .lifecycle-vso { background:#eef3fc; color:var(--you); }
+  .lifecycle-approved { background:#eef8f1; color:var(--ok); }
+  .lifecycle-submitted { background:#f3eefb; color:#6b3fa0; }
+  .lifecycle-decided { background:#fff8e6; color:#8a5a12; }
+  .lifecycle-decision { background:#fdeeee; color:var(--lock); }
+  .lifecycle-appeal { background:#fdeeee; color:var(--lock); }
+  .page-footer { margin-top:auto; padding-top:56px; }
+  .footer-links { font-size:13px; margin:0 0 14px; color:var(--muted); }
+  .footer-links a { color:#0071e3; text-decoration:none; }
+  .footer-links a:hover { text-decoration:underline; }
+  .disclaimer { margin-top:0; padding-top:16px; border-top:1px solid rgba(0,0,0,0.08);
+                font-size:12px; line-height:1.55; color:#86868b; }
   .score { font-family:"Courier Prime",monospace; font-weight:700; }
+  .doc-receipt { margin:10px 0 0 28px; padding:12px 14px; background:var(--wash);
+                 border-radius:6px; border-left:4px solid var(--doc); font-size:14px; }
+  .doc-receipt-intro { font-weight:600; margin-bottom:8px; }
+  .doc-receipt-row { padding:3px 0; font-family:"Courier Prime",monospace; font-size:13px; }
+  #vacare-loading { position:fixed; inset:0; z-index:9999; display:none; align-items:center;
+                    justify-content:center; background:rgba(255,255,255,0.94); }
+  #vacare-loading.active { display:flex; }
+  .loading-panel { width:min(420px,90vw); padding:28px 24px; border:1.6px solid var(--ink);
+                   border-radius:10px; background:#fff; text-align:center; }
+  .loading-panel p { margin:0 0 16px; font-size:15px; }
+  .progress-track { height:8px; background:var(--wash); border-radius:4px; overflow:hidden;
+                    border:1px solid var(--rule); }
+  .progress-bar { height:100%; width:0%; background:var(--ok); border-radius:3px; }
+  .progress-bar.running { animation:vacare-fill 48s ease-out forwards; }
+  @keyframes vacare-fill {
+    0% { width:0%; }
+    70% { width:88%; }
+    100% { width:95%; }
+  }
+  .heading-with-help { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .heading-with-help h2, .heading-with-help h3 { margin:0; border:none; padding:0; flex:1; min-width:0; }
+  .label-with-help { display:flex; align-items:center; gap:6px; margin:10px 0 3px; }
+  .label-with-help label { margin:0; }
+  .help-icon-btn {
+    flex-shrink:0; width:22px; height:22px; padding:0; border-radius:50%;
+    border:1.4px solid var(--muted); background:#fff; color:var(--muted);
+    font-size:13px; font-weight:700; line-height:1; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .help-icon-btn:hover { border-color:var(--you); color:var(--you); }
+  .help-modal[hidden] { display:none; }
+  .help-modal { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .help-modal-backdrop { position:absolute; inset:0; background:rgba(25,28,32,0.35); }
+  .help-modal-panel {
+    position:relative; width:min(380px,100%); max-height:min(80vh,420px); overflow-y:auto;
+    background:#fff; border:1.6px solid var(--ink); border-radius:10px; padding:18px 20px 16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.12);
+  }
+  .help-modal-close {
+    position:absolute; top:8px; right:10px; width:28px; height:28px; padding:0;
+    border:none; background:transparent; font-size:22px; line-height:1; cursor:pointer; color:var(--muted);
+  }
+  .help-modal-close:hover { color:var(--ink); }
+  .help-modal-title { font-family:"Archivo",sans-serif; font-size:17px; font-weight:800; margin:0 28px 10px 0; line-height:1.25; }
+  .help-modal-body { margin:0; font-size:14px; line-height:1.55; color:var(--ink); }
+  .help-modal-foot { margin:12px 0 0; font-size:13px; }
+  {% block page_styles %}{% endblock %}
 </style>
 </head>
-<body>
-<div class="sheet">
-  <div class="eyebrow">VACARE &middot; claim prep</div>
-  <nav><a href="/chat">Chat intake</a><a href="/">Claims</a><a href="/intake">Long form</a><a href="/forms">Form library</a></nav>
-  {% block content %}{% endblock %}
-  <div class="disclaimer">
-    VACARE helps organize a claim. It does not provide legal advice and cannot predict or guarantee
-    a VA decision. Deadlines shown are computed from the dates entered and must be confirmed by a
-    VSO or accredited representative before anything is filed.
+<body class="{% block body_class %}{% endblock %}">
+<div id="vacare-loading" aria-live="polite" aria-busy="true">
+  <div class="loading-panel">
+    <p id="vacare-loading-msg">Working...</p>
+    <div class="progress-track"><div class="progress-bar"></div></div>
+    <p class="muted" style="margin-top:14px;font-size:13px">This usually takes 15-45 seconds.</p>
   </div>
 </div>
+<div class="sheet">
+  <div class="eyebrow">VACARE &middot; claim prep</div>
+  <nav>
+    <a href="/chat/new">Start claim</a>
+    <a href="/">My claims</a>
+    <button type="button" id="vacare-test-key" class="dev-key-btn" title="Test API key (developers)">API</button>
+  </nav>
+  <div id="vacare-key-status" class="key-status" role="status" aria-live="polite"></div>
+  {% block content %}{% endblock %}
+  {% block page_footer %}
+  <footer class="page-footer">
+    {% block footer_links %}{% endblock %}
+    {% block disclaimer %}
+    <div class="disclaimer">
+      VACARE helps organize a claim. It does not provide legal advice and cannot predict or guarantee
+      a VA decision. Deadlines shown are computed from the dates entered and must be confirmed by a
+      VSO or accredited representative before anything is filed.
+    </div>
+    {% endblock %}
+  </footer>
+  {% endblock %}
+</div>
+<script>
+(function () {
+  var overlay = document.getElementById("vacare-loading");
+  var msg = document.getElementById("vacare-loading-msg");
+  var bar = overlay ? overlay.querySelector(".progress-bar") : null;
+  if (!overlay) return;
+
+  function loadingMessage(form) {
+    var quickPick = form.querySelector("#chat-quick-pick");
+    if (quickPick && quickPick.value) {
+      return "Saving your answer...";
+    }
+    var file = form.querySelector('input[type="file"]');
+    var hasText = form.querySelector("textarea");
+    var typed = hasText && hasText.value && hasText.value.trim().length > 0;
+    if (file && file.files && file.files.length && typed) {
+      return "Reading your story and document...";
+    }
+    if (file && file.files && file.files.length) {
+      return "Reading your document...";
+    }
+    if (typed) {
+      return form.id === "chat-form" ? "Saving your answer..." : "Reading your story...";
+    }
+    var custom = form.getAttribute("data-loading-msg");
+    if (custom) return custom;
+    return "Working...";
+  }
+
+  document.querySelectorAll("form[data-vacare-loading]").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      if (msg) msg.textContent = loadingMessage(form);
+      if (bar) {
+        bar.classList.remove("running");
+        void bar.offsetWidth;
+        bar.classList.add("running");
+      }
+      overlay.classList.add("active");
+      setTimeout(function () {
+        form.querySelectorAll("button[type=submit],input[type=submit]").forEach(function (btn) {
+          btn.disabled = true;
+        });
+      }, 0);
+    });
+  });
+
+  var keyBtn = document.getElementById("vacare-test-key");
+  var keyBox = document.getElementById("vacare-key-status");
+  if (keyBtn && keyBox) {
+    keyBtn.addEventListener("click", function () {
+      keyBtn.disabled = true;
+      keyBox.style.display = "block";
+      keyBox.className = "key-status";
+      keyBox.textContent = "Checking API key (uses one request)...";
+      fetch("/api/gemini/status")
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          keyBox.textContent = data.message || "No response.";
+          keyBox.classList.add(data.ok ? "ok" : "bad");
+        })
+        .catch(function () {
+          keyBox.textContent = "Could not reach the server.";
+          keyBox.classList.add("bad");
+        })
+        .finally(function () { keyBtn.disabled = false; });
+    });
+  }
+
+  document.querySelectorAll("[data-help-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var modal = document.getElementById(btn.getAttribute("data-help-open"));
+      if (!modal) return;
+      modal.hidden = false;
+      var close = modal.querySelector(".help-modal-close");
+      if (close) close.focus();
+    });
+  });
+  document.querySelectorAll(".help-modal").forEach(function (modal) {
+    function closeModal() { modal.hidden = true; }
+    modal.querySelectorAll("[data-help-close]").forEach(function (el) {
+      el.addEventListener("click", closeModal);
+    });
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll(".help-modal:not([hidden])").forEach(function (modal) {
+      modal.hidden = true;
+    });
+  });
+})();
+</script>
 </body>
 </html>

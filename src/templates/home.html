@@ -1,21 +1,146 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Claims</h1>
-<p class="muted">Every claim in the local database.</p>
+<style>
+  .hero {
+    margin:4px 0 36px; padding-top:8px;
+  }
+  .hero h1 {
+    font-family:"Archivo",sans-serif; font-weight:800;
+    font-size:clamp(42px,9vw,58px); line-height:1.04;
+    letter-spacing:-0.035em; color:#1d1d1f;
+    margin:0 0 14px;
+  }
+  .hero .lead {
+    font-size:clamp(18px,2.8vw,22px); line-height:1.45;
+    color:#6e6e73; font-weight:400; max-width:540px; margin:0 0 28px;
+  }
+  .hero-cta .btn {
+    font-size:17px; padding:13px 26px; border-radius:999px;
+    background:#0071e3; border-color:#0071e3;
+    box-shadow:0 2px 8px rgba(0,113,227,0.28);
+    transition:background .15s ease, transform .1s ease, box-shadow .15s ease;
+  }
+  .hero-cta .btn:hover {
+    background:#0077ed; border-color:#0077ed;
+    box-shadow:0 4px 14px rgba(0,113,227,0.35);
+  }
+  .hero-cta .btn:active { transform:scale(0.98); }
+  .claims-section { margin-top:8px; }
+  .claims-section h2 {
+    font-family:"Archivo",sans-serif; font-weight:800; font-size:22px;
+    margin:0 0 16px; letter-spacing:-0.02em;
+  }
+  .claims-list {
+    display:flex; flex-direction:column; gap:10px;
+    max-width:720px;
+  }
+  .claims-row {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:16px 18px; background:#fff;
+    border:1px solid rgba(0,0,0,0.06); border-radius:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
+    transition:box-shadow .2s ease, transform .2s ease;
+  }
+  .claims-row:hover {
+    box-shadow:0 2px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  }
+  .claims-row-main { flex:1; min-width:0; }
+  .claims-title {
+    font-size:17px; font-weight:600; color:#1d1d1f;
+    letter-spacing:-0.01em; margin-bottom:8px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .claims-meta {
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  }
+  .lifecycle-badge {
+    display:inline-flex; align-items:center;
+    font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px;
+    font-family:"Public Sans",sans-serif; letter-spacing:.02em;
+    text-transform:none;
+  }
+  .lifecycle-draft { background:#f5f5f7; color:#636366; }
+  .lifecycle-vso { background:#e8f0fe; color:#1d4fc4; }
+  .lifecycle-approved { background:#e8f5ec; color:#1e6f45; }
+  .lifecycle-submitted { background:#f3eefb; color:#6b3fa0; }
+  .lifecycle-decided { background:#fff8e6; color:#9a6700; }
+  .lifecycle-decision { background:#fdeeee; color:#b3261e; }
+  .lifecycle-appeal { background:#fdeeee; color:#b3261e; }
+  .msg-pill {
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11px; font-weight:600; padding:4px 10px 4px 8px;
+    border-radius:999px; background:#0071e3; color:#fff;
+    box-shadow:0 1px 3px rgba(0,113,227,0.35);
+  }
+  .msg-pill::before {
+    content:""; width:6px; height:6px; border-radius:50%;
+    background:#fff; flex-shrink:0;
+  }
+  .msg-pill[hidden] { display:none !important; }
+  .claims-open {
+    flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+    min-width:72px; padding:8px 16px; border-radius:999px;
+    background:#1d1d1f; color:#fff !important; font-size:14px; font-weight:600;
+    text-decoration:none !important; border:1.5px solid #1d1d1f;
+    box-shadow:0 1px 2px rgba(0,0,0,0.12);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease, transform .15s ease;
+    position:relative; overflow:hidden; z-index:0;
+  }
+  .claims-open::after {
+    content:""; position:absolute; inset:0; border-radius:999px;
+    background:radial-gradient(circle at 50% 50%, rgba(0,113,227,0.45), transparent 70%);
+    opacity:0; transform:scale(0.6);
+    transition:opacity .35s ease, transform .35s ease;
+    z-index:-1;
+  }
+  .claims-open:hover {
+    color:#fff !important; border-color:#0071e3;
+    box-shadow:0 0 0 1px #0071e3, 0 0 16px rgba(0,113,227,0.55), 0 4px 12px rgba(0,113,227,0.25);
+  }
+  .claims-open:hover::after {
+    opacity:1; transform:scale(1.15);
+  }
+  .claims-open:active { transform:scale(0.97); }
+</style>
+
+<div class="hero">
+  <h1>VACARE</h1>
+  <p class="lead">Help filing your VA disability claim — step by step, in plain English.</p>
+  <p class="hero-cta">
+    <a href="/chat/new" class="btn">Start your claim</a>
+  </p>
+</div>
+
 {% if claims %}
-<table>
-  <tr><th>Claim</th><th>Veteran</th><th>Type</th><th>Status</th></tr>
-  {% for id, name, claim_type, status in claims %}
-  <tr>
-    <td><a href="/claim/{{ id }}" class="form-no">{{ id }}</a></td>
-    <td>{{ name }}</td>
-    <td>{{ claim_type.replace('_',' ') }}</td>
-    <td>{{ status.replace('_',' ') }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<div class="wash">No claims yet.</div>
+<div class="claims-section">
+  <h2>Your claims</h2>
+  <div class="claims-list" id="vacare-claims-table">
+    {% for row in claims %}
+    <div class="claims-row" data-claim-row="{{ row.id }}">
+      <div class="claims-row-main">
+        <div class="claims-title">{{ row.title }}</div>
+        <div class="claims-meta">
+          {% if row.badge %}
+          <span class="lifecycle-badge {{ row.badge.css_class }}">{{ row.badge.label }}</span>
+          {% else %}
+          <span class="lifecycle-badge lifecycle-draft">{{ row.status.replace('_',' ') }}</span>
+          {% endif %}
+          <span class="msg-pill vacare-live-badge" data-live-badge="{{ row.id }}" hidden>New message</span>
+        </div>
+      </div>
+      <a href="/claim/{{ row.id }}/chat" class="claims-open">Open</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% endif %}
-<p style="margin-top:22px"><a href="/intake" class="btn">Start a new intake</a></p>
+
+{% if claims %}{% include "partials/live_client.html" %}
+<script>VacareLive.startInboxPoll();</script>{% endif %}
+{% endblock %}
+
+{% block footer_links %}
+<p class="footer-links">
+  <a href="/intake">Long form (advanced)</a> · <a href="/forms">Form library</a>
+</p>
 {% endblock %}

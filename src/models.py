@@ -9,7 +9,7 @@ It is NOT a legal review and does not decide whether a claim will be granted.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
@@ -89,6 +89,22 @@ class VSOVerdict(str, Enum):
     APPROVED_TO_FILE = "approved_to_file"
 
 
+class MessageAuthor(str, Enum):
+    VETERAN = "veteran"
+    VSO = "vso"
+    SYSTEM = "system"
+
+
+class CaseMessage(BaseModel):
+    """One note in the veteran ↔ VSO thread (M12-lite)."""
+
+    id: str = Field(default_factory=new_id)
+    claim_id: str
+    author: MessageAuthor
+    body: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # ---------------------------------------------------------------------------
 # Core records
 # ---------------------------------------------------------------------------
@@ -100,6 +116,7 @@ class Veteran(BaseModel):
     id: str = Field(default_factory=new_id)
     first_name: str
     last_name: str
+    middle_name: Optional[str] = None
     # Optional so a conversational intake can build a veteran progressively;
     # the CLI and web form still require it up front.
     dob: Optional[date] = None
@@ -282,6 +299,18 @@ class VSOReview(BaseModel):
     reviewed_on: date = Field(default_factory=date.today)
 
 
+class VaSubmission(BaseModel):
+    """A document package sent to VA Benefits Intake."""
+
+    id: str = Field(default_factory=new_id)
+    submission_id: str
+    doc_type: str = "21-526EZ"
+    status: str
+    message: Optional[str] = None
+    submitted_on: date = Field(default_factory=date.today)
+    updated_at: Optional[str] = None
+
+
 class LaneContext(BaseModel):
     """The answers that decide which lane a veteran is in.
 
@@ -308,8 +337,13 @@ class LaneContext(BaseModel):
 
     # Decision review inputs
     decision_date: Optional[date] = None
+    decision_summary: Optional[str] = None
+    decision_outcome: Optional[str] = None  # granted, partial, denied, ...
+    decision_granted: List[str] = Field(default_factory=list)
+    decision_denied: List[str] = Field(default_factory=list)
     has_new_evidence: bool = False
     wants_judge: bool = False
+    appeal_door_selected: Optional[str] = None
 
     # Add-ons and dependencies
     unemployable: bool = False
@@ -321,6 +355,9 @@ class LaneContext(BaseModel):
     itf_filed_on: Optional[date] = None
     poa_filed_on: Optional[date] = None
     records_auth_signed_on: Optional[date] = None
+
+    # Representation
+    filing_on_own: bool = False
 
     @field_validator("combined_rating")
     @classmethod
@@ -345,6 +382,7 @@ class Claim(BaseModel):
     tasks: List[Task] = Field(default_factory=list)
     status_history: List[StatusEvent] = Field(default_factory=list)
     reviews: List[VSOReview] = Field(default_factory=list)
+    va_submissions: List[VaSubmission] = Field(default_factory=list)
     created_on: date = Field(default_factory=date.today)
 
     # -- small helpers used by the intake flow --------------------------------

@@ -24,12 +24,13 @@ from datetime import date
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src import extract, gemini
+from src import extract, gemini, itf as itf_helpers, poa as poa_helpers
 from src.claim_intake import ClaimIntake
 from src.gemini import Attachment  # re-exported for the web layer
 from src.models import (
     Branch,
     Claim,
+    ClaimStatus,
     DischargeType,
     EvidenceType,
     Veteran,
@@ -51,10 +52,15 @@ class Slot(str, Enum):
     NAME = "name"
     DOB = "dob"
     SERVICE_DATES = "service_dates"
+    CONTACT = "contact"
     RATING = "rating"
     INTENT = "intent"
     DECISION = "decision"
     RECORDS = "records"
+    ITF = "itf"
+    POA = "poa"
+    APPEAL_DISAGREE = "appeal_disagree"
+    APPEAL_DOOR = "appeal_door"
     DONE = "done"
 
 
@@ -70,6 +76,7 @@ class Question:
     slot: Slot
     text: str
     help_text: str = ""
+    doc_tip: str = ""
     accepts_upload: bool = False
     options: List[str] = field(default_factory=list)
 
@@ -82,21 +89,148 @@ class Session:
     transcript: List[Message] = field(default_factory=list)
     story_done: bool = False
     identity_done: bool = False
+    contact_done: bool = False
     rating_done: bool = False
     intent_done: bool = False
     decision_done: bool = False
     records_done: bool = False
+    itf_done: bool = False
+    poa_done: bool = False
+    appeal_mode: bool = False
+    appeal_disagree_done: bool = False
+    appeal_door_done: bool = False
 
     def say(self, role: str, text: str, detail: str = "") -> None:
         self.transcript.append(Message(role=role, text=text, detail=detail))
 
 
-def new_session() -> Session:
+def new_session(claim: Optional[Claim] = None) -> Session:
     """Start with a placeholder veteran; real details arrive from the DD-214 or the name slot."""
-    session_claim = ClaimIntake().start_claim(
-        Veteran(first_name="Unknown", last_name="Veteran")
-    )
-    return Session(claim=session_claim)
+    if claim is None:
+        claim = ClaimIntake().start_claim(
+            Veteran(first_name="Unknown", last_name="Veteran")
+        )
+    return Session(claim=claim)
+
+
+_SESSION_FLAGS = (
+    "story_done",
+    "identity_done",
+    "contact_done",
+    "rating_done",
+    "intent_done",
+    "decision_done",
+    "records_done",
+    "itf_done",
+    "poa_done",
+    "appeal_mode",
+    "appeal_disagree_done",
+    "appeal_door_done",
+)
+
+
+def session_to_dict(session: Session) -> dict:
+    return {
+        "transcript": [
+            {"role": m.role, "text": m.text, "detail": m.detail}
+            for m in session.transcript
+        ],
+        **{flag: getattr(session, flag) for flag in _SESSION_FLAGS},
+    }
+
+
+def session_from_saved(claim: Claim, data: dict) -> Session:
+    session = Session(claim=claim)
+    for flag in _SESSION_FLAGS:
+        setattr(session, flag, bool(data.get(flag, False)))
+    for item in data.get("transcript", []):
+        session.transcript.append(
+            Message(
+                role=item.get("role", "bot"),
+                text=item.get("text", ""),
+                detail=item.get("detail", ""),
+            )
+        )
+    return session
+
+
+def sync_session_from_claim(session: Session) -> None:
+    """Align chat slot flags with saved claim data when resuming without a transcript."""
+    claim = session.claim
+    context = claim.context
+
+    if claim.conditions:
+        session.story_done = True
+    if _identity_known(claim):
+        session.identity_done = True
+    if _contact_known(claim):
+        session.contact_done = True
+
+    if (
+        context.has_existing_rating
+        or context.claiming_worse
+        or context.claiming_new
+        or context.caused_by_rated_condition
+        or context.disagrees_with_decision
+        or (claim.conditions and not context.has_existing_rating)
+    ):
+        session.rating_done = True
+
+    if (
+        context.claiming_worse
+        or context.claiming_new
+        or context.caused_by_rated_condition
+        or context.disagrees_with_decision
+        or not context.has_existing_rating
+    ):
+        session.intent_done = True
+
+    if context.disagrees_with_decision and context.decision_date:
+        session.decision_done = True
+
+    if claim.evidence or session.story_done:
+        session.records_done = True
+
+    if context.itf_filed_on or not itf_helpers.itf_applies(claim):
+        session.itf_done = True
+    if context.poa_filed_on or context.filing_on_own:
+        session.poa_done = True
+
+    if claim.status in {
+        ClaimStatus.READY_FOR_VSO,
+        ClaimStatus.IN_VSO_REVIEW,
+        ClaimStatus.SUBMITTED,
+        ClaimStatus.DECIDED,
+    }:
+        session.story_done = True
+        session.identity_done = True
+        session.contact_done = True
+        session.rating_done = True
+        session.intent_done = True
+        session.decision_done = True
+        session.records_done = True
+        session.itf_done = True
+        session.poa_done = True
+
+    if context.appeal_door_selected:
+        session.appeal_disagree_done = True
+        session.appeal_door_done = True
+
+
+def load_session_for_claim(
+    claim: Claim,
+    saved: Optional[dict],
+    *,
+    appeal_mode: bool = False,
+) -> Session:
+    if saved:
+        session = session_from_saved(claim, saved)
+    else:
+        session = new_session(claim)
+        sync_session_from_claim(session)
+    if appeal_mode:
+        start_appeal_mode(session)
+    return session
 
 
 def _identity_known(claim: Claim) -> bool:
@@ -108,63 +242,171 @@ def _identity_known(claim: Claim) -> bool:
     )
 
 
+def _contact_known(claim: Claim) -> bool:
+    veteran = claim.veteran
+    return bool(veteran.phone or veteran.email)
+
+
+def progress(session: Session) -> dict:
+    """Simple progress for the chat UI — no jargon."""
+    question = next_question(session)
+    steps = [
+        ("Tell us what's wrong", Slot.STORY),
+        ("Prove you served", Slot.IDENTITY),
+        ("Your contact info", Slot.CONTACT),
+        ("VA rating check", Slot.RATING),
+        ("Medical records", Slot.RECORDS),
+        ("Save your date with VA", Slot.ITF),
+        ("Appoint your VSO", Slot.POA),
+        ("Ready to file", Slot.DONE),
+    ]
+    slot = question.slot
+    if slot in {Slot.NAME, Slot.DOB, Slot.SERVICE_DATES}:
+        slot = Slot.IDENTITY
+    if slot in {Slot.INTENT, Slot.DECISION}:
+        slot = Slot.RATING
+    index = next((i for i, (_, s) in enumerate(steps) if s == slot), len(steps) - 1)
+    return {
+        "step": index + 1,
+        "total": len(steps),
+        "label": steps[index][0],
+        "percent": int((index / max(len(steps) - 1, 1)) * 100),
+    }
+
+
 # --- the question the veteran sees next ------------------------------------
 
 
+def start_appeal_mode(session: Session) -> None:
+    """Post-decision appeal guide — skips intake, asks disagree + door only."""
+    session.appeal_mode = True
+    session.story_done = True
+    session.identity_done = True
+    session.contact_done = True
+    session.rating_done = True
+    session.intent_done = True
+    session.decision_done = True
+    session.records_done = True
+    session.itf_done = True
+    session.poa_done = True
+
+
+def next_appeal_question(session: Session) -> Question:
+    from src import appeal as appeal_helpers
+
+    claim = session.claim
+    if not appeal_helpers.appeal_applies(claim):
+        return Question(
+            slot=Slot.DONE,
+            text="We need a decision date on a modern decision before appeal options apply.",
+        )
+
+    if not session.appeal_disagree_done:
+        return Question(
+            slot=Slot.APPEAL_DISAGREE,
+            text="Does this decision match what you expected?",
+            help_text="If the VA got it wrong, we'll help you pick a review path.",
+            options=["No — I want to challenge it", "Yes — I'm good with it"],
+        )
+
+    if not claim.context.disagrees_with_decision:
+        return Question(slot=Slot.DONE, text="Glad it worked out. You're all set.")
+
+    if not session.appeal_door_done and not claim.context.appeal_door_selected:
+        options = [opt.picker_label for opt in appeal_helpers.picker_options()]
+        return Question(
+            slot=Slot.APPEAL_DOOR,
+            text="Which path sounds most like your situation?",
+            help_text="Each has a one-year deadline from your decision date.",
+            options=options,
+        )
+
+    session.appeal_door_done = True
+    door = claim.context.appeal_door_selected
+    copy = appeal_helpers.DOOR_COPY.get(door or "", {})
+    title = copy.get("title", "Review path")
+    return Question(
+        slot=Slot.DONE,
+        text=f"Saved — {title}. Check your summary for deadlines and a filing checklist.",
+    )
+
+
 def next_question(session: Session) -> Question:
+    if session.appeal_mode:
+        return next_appeal_question(session)
+
     claim = session.claim
     context = claim.context
 
     if not session.story_done:
         return Question(
             slot=Slot.STORY,
-            text="In your own words - what happened to you, and what's bothering you now?",
-            help_text=(
-                "Write it however it comes out. One paragraph is plenty. You can also drop in "
-                "a photo or PDF of anything relevant."
-            ),
+            text="What hurts or bothers you — and what happened during your service?",
+            help_text="Just talk like you're telling a friend. One or two sentences is fine.",
             accepts_upload=True,
+            doc_tip=(
+                "Tip: You can upload a photo or PDF here if you already have paperwork "
+                "(medical notes, DD-214, etc.). We'll read it for you."
+            ),
         )
 
     if not session.identity_done:
         if not _identity_known(claim):
             return Question(
                 slot=Slot.IDENTITY,
-                text="Upload your DD-214 and I'll read your name, dates, and discharge off it.",
-                help_text="No DD-214 handy? Type 'skip' and I'll ask four short questions instead.",
+                text="Upload your DD-214 (discharge paper).",
+                help_text="Don't have it? Type skip and we'll ask a few quick questions.",
                 accepts_upload=True,
+                doc_tip=(
+                    "What's a DD-214? It's the paper you got when you left the military. "
+                    "It shows your name, service dates, and discharge type. "
+                    "You can often get a free copy from milConnect or your state VA office."
+                ),
             )
         session.identity_done = True
 
     if not _identity_known(claim) and session.identity_done:
         veteran = claim.veteran
-        if veteran.first_name == "Unknown":
+        if veteran.first_name in {"Unknown", "New"}:
             return Question(slot=Slot.NAME, text="What's your full name?")
         if veteran.dob is None:
-            return Question(slot=Slot.DOB, text="Date of birth? (YYYY-MM-DD)")
+            return Question(
+                slot=Slot.DOB,
+                text="What's your date of birth?",
+                help_text="Example: 1988-03-12",
+            )
         return Question(
             slot=Slot.SERVICE_DATES,
-            text="When did you enter and leave active service?",
-            help_text="Two dates, e.g. 2007-06-01 to 2013-08-30. If you're still in, give your "
-                      "separation date and say 'still serving'.",
+            text="When did you start and finish active duty?",
+            help_text="Example: 2007-06-01 to 2013-08-30. Still serving? Say still serving.",
         )
+
+    if not session.contact_done:
+        if _contact_known(claim):
+            session.contact_done = True
+        else:
+            return Question(
+                slot=Slot.CONTACT,
+                text="What's the best phone number and email for you?",
+                help_text="Example: 555-123-4567, you@email.com",
+            )
 
     if not session.rating_done:
         return Question(
             slot=Slot.RATING,
-            text="Do you have a VA disability rating right now?",
-            help_text="Give the combined percentage, or say 'none'.",
-            options=["none", "10%", "30%", "50%", "70%", "100%"],
+            text="Does the VA pay you for any disability right now?",
+            help_text="Pick one, or type your combined rating.",
+            options=["No, this is my first claim", "10%", "30%", "50%", "70%", "100%"],
         )
 
     if context.has_existing_rating and not session.intent_done:
         return Question(
             slot=Slot.INTENT,
-            text="What brings you here?",
+            text="What are you trying to do?",
             options=[
-                "A condition I'm rated for got worse",
-                "I have a new condition",
-                "A new condition caused by one I'm rated for",
+                "Something I have got worse",
+                "Something new",
+                "Something caused by what I am already rated for",
                 "I disagree with a VA decision",
             ],
         )
@@ -172,21 +414,60 @@ def next_question(session: Session) -> Question:
     if context.disagrees_with_decision and not session.decision_done:
         return Question(
             slot=Slot.DECISION,
-            text="What's the date on the decision letter, and do you have evidence VA hasn't seen?",
-            help_text="Upload the decision letter and I'll read the date off it. "
-                      "Mention 'new evidence' if you have some.",
+            text="Upload your VA decision letter (or tell us the date on it).",
+            help_text="We'll read the decision date off the letter if you upload it.",
             accepts_upload=True,
+            doc_tip=(
+                "What's a decision letter? It's the letter from the VA saying yes or no "
+                "to your claim and what rating you got. You need the date on it for appeals."
+            ),
         )
 
     if not session.records_done:
         return Question(
             slot=Slot.RECORDS,
-            text="Last step: upload any medical records, and I'll pull the diagnoses out.",
-            help_text="Upload as many as you like, then type 'done'.",
+            text="Upload any doctor or VA medical records you have.",
+            help_text="Upload one or more files, then tap Done when finished.",
             accepts_upload=True,
+            doc_tip=(
+                "What counts? Clinic visit notes, audiology/hearing tests, VA hospital "
+                "summaries, or private doctor letters that list your diagnoses. "
+                "We'll pull out conditions and dates so you don't have to re-type them."
+            ),
+            options=["Done uploading", "Skip for now"],
         )
 
-    return Question(slot=Slot.DONE, text="That's everything I need.")
+    if not session.itf_done:
+        if claim.context.itf_filed_on or not itf_helpers.itf_applies(claim):
+            session.itf_done = True
+        else:
+            return Question(
+                slot=Slot.ITF,
+                text=(
+                    "Want to save today's date with the VA? "
+                    "It's a free one-page form that says you're planning to claim — "
+                    "so if you're approved later, back pay can start from today."
+                ),
+                help_text="Already filed one? Type the date (example: 2026-06-01).",
+                options=["Yes — save today's date", "Skip for now"],
+            )
+
+    if not session.poa_done:
+        if claim.context.poa_filed_on or claim.context.filing_on_own:
+            session.poa_done = True
+        else:
+            return Question(
+                slot=Slot.POA,
+                text="Will a VSO help you file this claim?",
+                help_text="Already appointed one? Type the date (example: 2026-06-01).",
+                options=[
+                    "Yes — appoint a VSO (use today)",
+                    "I'm filing on my own",
+                    "Skip for now",
+                ],
+            )
+
+    return Question(slot=Slot.DONE, text="You're all set!")
 
 
 # --- applying an answer -----------------------------------------------------
@@ -194,6 +475,8 @@ def next_question(session: Session) -> Question:
 
 PERCENT = re.compile(r"(\d{1,3})\s*%?")
 ISO_DATE = re.compile(r"(\d{4}-\d{1,2}-\d{1,2})")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+PHONE = re.compile(r"\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}")
 
 
 def _parse_date(text: str) -> Optional[date]:
@@ -253,36 +536,54 @@ def apply_answer(session: Session, text: str) -> str:
             context.separation_date = end
         return f"Service {claim.veteran.service_start} to {end or 'ongoing'}."
 
+    if question.slot == Slot.CONTACT:
+        email_match = EMAIL.search(answer)
+        phone_match = PHONE.search(answer)
+        if email_match:
+            claim.veteran.email = email_match.group(0)
+        if phone_match:
+            claim.veteran.phone = phone_match.group(0)
+        if claim.veteran.phone or claim.veteran.email:
+            session.contact_done = True
+            parts = []
+            if claim.veteran.phone:
+                parts.append(f"phone {claim.veteran.phone}")
+            if claim.veteran.email:
+                parts.append(f"email {claim.veteran.email}")
+            return "Saved your " + " and ".join(parts) + "."
+        return "I need at least a phone number or email. Example: 555-123-4567, you@email.com"
+
     if question.slot == Slot.RATING:
         session.rating_done = True
-        if "none" in answer.lower() or "no" == answer.lower().strip():
+        lowered = answer.lower()
+        if "first claim" in lowered or "none" in lowered or lowered.strip() in {"no", "n"}:
             context.has_existing_rating = False
-            return "No rating yet - this is a first claim."
+            return "Got it — first claim."
         match = PERCENT.search(answer)
         if match:
             percent = int(match.group(1))
             context.combined_rating = min(percent, 100)
             context.has_existing_rating = percent > 0
             context.has_filed_before = percent > 0
-            return f"Rated at {percent}%. That means you've filed before."
+            return f"Got it — you're rated {percent}%."
         context.has_existing_rating = False
-        return "I'll treat that as no current rating."
+        return "Got it — I'll treat this as a first claim."
 
     if question.slot == Slot.INTENT:
         session.intent_done = True
         lowered = answer.lower()
         if "worse" in lowered:
             context.claiming_worse = True
-            return "A claim for increase."
-        if "caused" in lowered or "secondary" in lowered:
+            return "Okay — claim for increase."
+        if "caused" in lowered or "secondary" in lowered or "already rated" in lowered:
             context.caused_by_rated_condition = True
             context.claiming_new = True
-            return "A secondary claim - the nexus letter is the important part here."
-        if "disagree" in lowered or "decision" in lowered or "denied" in lowered:
+            return "Okay — secondary claim."
+        if "disagree" in lowered or "decision" in lowered:
             context.disagrees_with_decision = True
-            return "A decision review. I need the date on that letter."
+            return "Okay — we'll need your decision letter."
         context.claiming_new = True
-        return "A claim for a new condition."
+        return "Okay — new condition claim."
 
     if question.slot == Slot.DECISION:
         parsed = _parse_date(answer)
@@ -296,10 +597,116 @@ def apply_answer(session: Session, text: str) -> str:
         return "I still need the date on the decision letter (YYYY-MM-DD)."
 
     if question.slot == Slot.RECORDS:
-        session.records_done = True
-        return "Done. Here's what I have."
+        lowered = answer.lower()
+        if lowered in {"done", "done uploading", "skip", "skip for now"} or "done upload" in lowered or "skip" in lowered:
+            session.records_done = True
+            if "skip" in lowered:
+                return "No problem — you can add records later."
+            return "Great — let's wrap up."
+        return "Upload a file, or tap Done uploading / Skip for now."
+
+    if question.slot == Slot.ITF:
+        lowered = answer.lower()
+        if "skip" in lowered:
+            session.itf_done = True
+            return "No problem — you can save a start date anytime from your summary page."
+        if "yes" in lowered or "save" in lowered or "today" in lowered or "lock" in lowered:
+            claim.context.itf_filed_on = date.today()
+            session.itf_done = True
+            return (
+                f"Saved {date.today()} with the VA. If you're approved later, "
+                "back pay could start from that day."
+            )
+        parsed = _parse_date(answer)
+        if parsed:
+            claim.context.itf_filed_on = parsed
+            session.itf_done = True
+            return (
+                f"Saved {parsed} as your start date with the VA. If you're approved later, "
+                "back pay could begin from that day."
+            )
+        session.itf_done = True
+        return "Got it — you can save a start date later on your summary page."
+
+    if question.slot == Slot.POA:
+        lowered = answer.lower()
+        if "skip" in lowered:
+            session.poa_done = True
+            return "No problem — you can appoint a VSO anytime from your summary page."
+        if "on my own" in lowered or "myself" in lowered or "alone" in lowered:
+            poa_helpers.mark_filing_on_own(claim)
+            session.poa_done = True
+            return "Got it — we'll skip the VSO appointment form."
+        if "yes" in lowered or "appoint" in lowered or "today" in lowered:
+            claim.context.poa_filed_on = date.today()
+            claim.context.filing_on_own = False
+            session.poa_done = True
+            return f"Saved VSO appointment for {date.today()}."
+        parsed = _parse_date(answer)
+        if parsed:
+            poa_helpers.record_poa(claim, parsed)
+            session.poa_done = True
+            return f"Saved VSO appointment dated {parsed}."
+        session.poa_done = True
+        return "Got it — you can update this on your summary page."
+
+    if question.slot == Slot.APPEAL_DISAGREE:
+        from src import appeal as appeal_helpers
+
+        session.appeal_disagree_done = True
+        lowered = answer.lower()
+        if lowered.startswith("yes") or "good with" in lowered or "expected" in lowered:
+            appeal_helpers.mark_accepts_decision(claim)
+            return "Okay — no appeal path needed. Your summary has the decision on file."
+        appeal_helpers.mark_disagrees(claim)
+        return "Got it. Next we'll pick the review path that fits."
+
+    if question.slot == Slot.APPEAL_DOOR:
+        from src import appeal as appeal_helpers
+
+        lowered = answer.lower()
+        for form_number, copy in appeal_helpers.DOOR_COPY.items():
+            if copy["picker"].lower() in lowered or copy["title"].lower() in lowered:
+                appeal_helpers.select_door(claim, form_number)
+                session.appeal_door_done = True
+                return (
+                    f"Saved {copy['title']} (Form {form_number}). "
+                    "See your claim summary for deadlines and what to gather."
+                )
+        if "new evidence" in lowered or "supplemental" in lowered:
+            appeal_helpers.select_door(claim, "20-0995")
+        elif "judge" in lowered or "board" in lowered:
+            appeal_helpers.select_door(claim, "10182")
+        elif "senior" in lowered or "same file" in lowered or "higher" in lowered:
+            appeal_helpers.select_door(claim, "20-0996")
+        else:
+            return "Pick one of the listed options so we save the right form."
+        session.appeal_door_done = True
+        door = claim.context.appeal_door_selected or ""
+        copy = appeal_helpers.DOOR_COPY.get(door, {})
+        return f"Saved {copy.get('title', door)}. Check your summary for next steps."
 
     return "Thanks."
+
+
+def submit_readiness(claim: Claim) -> dict:
+    """Plain checklist for the final screen."""
+    veteran = claim.veteran
+    missing: List[str] = []
+    if not claim.conditions:
+        missing.append("Tell us at least one condition you're claiming")
+    if veteran.first_name in {"Unknown", "New"} or veteran.last_name in {"Case", "Veteran"}:
+        missing.append("Your full name")
+    if not veteran.dob:
+        missing.append("Date of birth")
+    if not (veteran.service_start or claim.context.separation_date):
+        missing.append("Service dates")
+    if not (veteran.phone or veteran.email):
+        missing.append("Phone or email")
+    return {
+        "ready": len(missing) == 0,
+        "missing": missing,
+    }
 
 
 def _safe_iso(text: str) -> bool:
@@ -323,6 +730,13 @@ def _apply_story(session: Session, story: str) -> str:
                 "conditions automatically - a VSO will do that by hand.)")
 
     payload = extract.extract_from_story(story)
+    return _apply_story_payload(session, story, payload)
+
+
+def _apply_story_payload(session: Session, story: str, payload: Dict[str, Any]) -> str:
+    """Merge a story-shaped extraction payload into the claim."""
+    session.story_done = True
+    claim = session.claim
     claim.summary = story
     session_intake = ClaimIntake(claim)
 
@@ -344,8 +758,10 @@ def _apply_story(session: Session, story: str) -> str:
 
     if not added:
         session.story_done = False
-        return ("I couldn't pick out a specific condition there. Try naming what hurts and "
-                "how it affects you day to day.")
+        return (
+            "I couldn't pick out a specific condition there. Try naming what hurts and "
+            "how it affects you day to day."
+        )
 
     receipt = f"Got {len(added)}: {', '.join(added)}."
     if event_fields:
@@ -353,54 +769,55 @@ def _apply_story(session: Session, story: str) -> str:
     return receipt
 
 
-def apply_document(session: Session, attachment: Attachment) -> str:
-    """Handle an uploaded file for whatever slot we're on."""
-    claim = session.claim
-    session.say("veteran", f"[uploaded {attachment.filename}]")
+def apply_story_with_document(session: Session, story: str, attachment: Attachment) -> List[tuple]:
+    """One Gemini call for story + document on the first chat turn.
 
+    Returns a list of (message, detail) pairs for the chat transcript.
+    """
     if not gemini.available():
-        return "No AI key configured, so I can't read documents yet."
+        session.story_done = True
+        session.claim.summary = story
+        return [(
+            "Saved your story. (No AI key configured, so I couldn't read the upload - "
+            "a VSO will handle that by hand.)",
+            "",
+        )]
 
-    payload = extract.extract_from_document(attachment)
-    doc_type = payload.get("document_type", "other")
-    intake = ClaimIntake(claim)
+    payload = extract.extract_intake_turn(story, attachment)
+    story_receipt = _apply_story_payload(session, story, payload)
+    receipts: List[tuple] = [(story_receipt, "")]
+    if not session.story_done:
+        return receipts
 
-    evidence_type = DOC_TO_EVIDENCE.get(doc_type, EvidenceType.OTHER)
-    intake.add_evidence(
-        evidence_type=evidence_type,
-        title=payload.get("summary") or attachment.filename,
-        source=attachment.filename,
+    from src.document_ingest import ingest_document
+
+    result = ingest_document(
+        session.claim,
+        attachment.filename,
+        attachment.data,
+        preloaded_payload=payload,
     )
-
-    notes: List[str] = [f"Read it as: {payload.get('summary') or doc_type}."]
-
-    fields = extract.veteran_fields_from(payload)
-    if fields:
-        applied = _merge_veteran(claim, fields)
-        if applied:
-            notes.append("Filled in " + ", ".join(applied) + " - you don't need to type those.")
+    if result.document_type == "dd214":
         session.identity_done = True
+    if session.claim.context.decision_date:
+        session.decision_done = True
 
-    if doc_type == "decision_letter":
-        decision = extract.parse_date(payload.get("decision_date"))
-        if decision:
-            claim.context.decision_date = decision
-            claim.context.disagrees_with_decision = True
-            session.decision_done = True
-            notes.append(f"Decision dated {decision}.")
+    if result.parsed_with_gemini:
+        receipts.append((result.message, result.detail))
+    return receipts
 
-    new_conditions = extract.conditions_from(payload)
-    existing = {condition.name.lower() for condition in claim.conditions}
-    added = []
-    for condition_fields in new_conditions:
-        if condition_fields["name"].lower() in existing:
-            continue
-        intake.add_condition(**condition_fields)
-        added.append(condition_fields["name"])
-    if added:
-        notes.append("Also found: " + ", ".join(added) + ".")
 
-    return " ".join(notes)
+def apply_document(session: Session, attachment: Attachment):
+    """Handle an uploaded file for whatever slot we're on."""
+    session.say("veteran", f"[uploaded {attachment.filename}]")
+    from src.document_ingest import DocumentIngestResult, ingest_document
+
+    result = ingest_document(session.claim, attachment.filename, attachment.data)
+    if result.document_type == "dd214":
+        session.identity_done = True
+    if session.claim.context.decision_date:
+        session.decision_done = True
+    return result
 
 
 def _merge_veteran(claim: Claim, fields: Dict[str, Any]) -> List[str]:
