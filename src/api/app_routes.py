@@ -9,12 +9,17 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src import intake_chat
 from src.api import app_bridge
 from src.claim_intake import ClaimIntake
+from src.formfill import fill_526ez
 from src.gemini import GeminiError
 from src.storage import DEFAULT_DB_PATH, ClaimStore
 
@@ -171,6 +176,28 @@ async def upload_document(routing_id: str, file: UploadFile = File(...)) -> Dict
         "messages": app_bridge.chat_messages(session, since=before),
         "claim": app_bridge.claim_to_app_claim(session.claim),
     }
+
+
+@router.get("/claims/{routing_id}/526ez")
+def download_526ez(routing_id: str):
+    """The veteran's filled 21-526EZ, as a draft for them to check.
+
+    This is the veteran's own data on their own form, for review — not a
+    filing. An accredited representative still reviews and files it, and the
+    boxes we deliberately do not collect (SSN, mailing address) stay blank.
+    """
+    with _store() as store:
+        claim = store.load_claim(routing_id)
+    if claim is None:
+        raise HTTPException(status_code=404, detail="No claim for that routing id")
+
+    output = Path(tempfile.gettempdir()) / f"21-526EZ-{claim.id}.pdf"
+    fill_526ez(claim, output)
+    return FileResponse(
+        output,
+        media_type="application/pdf",
+        filename=f"21-526EZ-draft-{claim.veteran.last_name or 'claim'}.pdf",
+    )
 
 
 @router.post("/claims/{routing_id}/confirm")

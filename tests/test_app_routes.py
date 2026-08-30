@@ -132,3 +132,17 @@ def test_an_upload_failure_is_reported_not_swallowed(client, monkeypatch):
                            files={"file": ("dd214.pdf", b"%PDF-", "application/pdf")})
     assert response.status_code == 502
     assert "no API key" in response.json()["detail"]
+
+
+def test_the_veteran_can_download_their_filled_526ez(client):
+    client.get(f"/api/app/claims/{ROUTING_ID}")
+    response = client.get(f"/api/app/claims/{ROUTING_ID}/526ez")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "21-526EZ" in response.headers["content-disposition"]
+    assert response.content[:5] == b"%PDF-"
+
+
+def test_downloading_a_form_for_an_unknown_claim_is_a_404(client):
+    assert client.get("/api/app/claims/route-never-seen/526ez").status_code == 404

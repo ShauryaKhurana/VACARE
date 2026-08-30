@@ -125,6 +125,10 @@ export class HttpApiClient implements ApiClient {
     return body.messages;
   }
 
+  formDownloadUrl(routingId: RoutingId): string | null {
+    return this.url(`/claims/${encodeURIComponent(routingId)}/526ez`);
+  }
+
   async confirmClaimDraft(routingId: RoutingId): Promise<{ vso: VsoInfo }> {
     return this.request<{ vso: VsoInfo }>(
       `/claims/${encodeURIComponent(routingId)}/confirm`,

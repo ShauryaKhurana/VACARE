@@ -8,6 +8,7 @@ import { ComputedTag } from "@/components/shared/ComputedTag";
 import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import { IconPencil, IconArrowLeft } from "@tabler/icons-react";
+import { DraftFormCard } from "@/components/chat/DraftFormCard";
 
 const SERVICE_INFO = [
   { label: "Branch", value: "U.S. Army" },
@@ -121,6 +122,8 @@ export default function ReviewPage() {
           <div className="h-full w-full rounded-full bg-accent" />
         </div>
       </div>
+
+      {routingId && <DraftFormCard routingId={routingId} />}
 
       <p className="text-sm text-text-secondary">
         You&apos;re confirming this is accurate. Your VSO will review it next.
