@@ -12,32 +12,49 @@ from typing import Any, Dict, Optional
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "parse_cache"
 
-DOCUMENT_FIELD_KEYS = (
-    "document_type",
-    "confidence",
-    "summary",
-    "first_name",
-    "last_name",
-    "date_of_birth",
-    "branch",
-    "service_start",
-    "service_end",
-    "discharge_type",
-    "decision_date",
-    "conditions",
-    "providers",
-)
+def document_field_keys() -> tuple:
+    """Every field the document extractor can return.
+
+    This used to be a hand-written list, and it drifted: seven fields the
+    schema had grown - ssn, home_of_record, still_serving, and the four
+    decision-letter fields - were silently dropped on the way into the cache.
+    A cached document therefore lost them, which looks exactly like the
+    extraction not working. Deriving it from the schema keeps them in step.
+    """
+    from src import extract
+
+    return tuple(extract.DOCUMENT_SCHEMA["properties"].keys())
 
 _MEMORY: Dict[str, Dict[str, Any]] = {}
 
 
 def file_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    # The extraction contract is part of the key. Keyed on bytes alone, a
+    # cached result outlived every change to the schema or prompt: adding an
+    # SSN field changed nothing for any document already seen, which looks
+    # exactly like the new field not working.
+    return hashlib.sha256(data + b"|" + extraction_version().encode()).hexdigest()
+
+
+# Bump when a cached entry's *shape* changes for reasons the schema does not
+# capture. Entries written before this are ignored rather than needing anyone
+# to clear a directory by hand.
+CACHE_FORMAT = "2"
+
+
+def extraction_version() -> str:
+    """A fingerprint of what the extractor currently asks for."""
+    from src import extract
+
+    return hashlib.sha256(
+        (json.dumps(extract.DOCUMENT_SCHEMA, sort_keys=True)
+         + extract.SYSTEM + CACHE_FORMAT).encode()
+    ).hexdigest()[:16]
 
 
 def document_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Keep only document-parse keys from a full intake-turn payload."""
-    return {key: payload[key] for key in DOCUMENT_FIELD_KEYS if key in payload}
+    return {key: payload[key] for key in document_field_keys() if key in payload}
 
 
 def get(data: bytes) -> Optional[Dict[str, Any]]:

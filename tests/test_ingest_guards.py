@@ -293,3 +293,81 @@ def test_a_malformed_ssn_is_refused():
 
     assert not session.ssn_done
     assert "9 digits" in receipt
+
+
+# --- the cache must not silently drop schema fields -------------------------
+
+
+def test_the_parse_cache_keeps_every_field_the_schema_defines():
+    """A hand-written allow-list drifted and dropped seven fields."""
+    from src import extract, parse_cache
+
+    assert set(parse_cache.document_field_keys()) == set(
+        extract.DOCUMENT_SCHEMA["properties"]
+    )
+
+
+def test_a_cached_parse_round_trips_the_newer_fields():
+    from src import parse_cache
+
+    payload = {
+        "document_type": "dd214", "confidence": "high", "summary": "DD-214",
+        "first_name": "Marcus", "last_name": "Rivera", "ssn": "000000000",
+        "home_of_record": "3114 ELM STREET, TUCSON, AZ 85701",
+        "still_serving": False, "outcome": "granted", "combined_rating": 30,
+    }
+    kept = parse_cache.document_fields(payload)
+    for key in ("ssn", "home_of_record", "still_serving", "outcome", "combined_rating"):
+        assert key in kept, f"{key} was dropped on the way into the cache"
+
+
+def test_the_cache_key_changes_when_the_extraction_contract_changes(monkeypatch):
+    """Otherwise a schema change is invisible for any document already seen."""
+    from src import extract, parse_cache
+
+    before = parse_cache.file_hash(b"same bytes")
+    schema = {**extract.DOCUMENT_SCHEMA,
+              "properties": {**extract.DOCUMENT_SCHEMA["properties"],
+                             "new_field": {"type": "string"}}}
+    monkeypatch.setattr(extract, "DOCUMENT_SCHEMA", schema)
+    assert parse_cache.file_hash(b"same bytes") != before
+
+
+# --- what the DD-214 already answers is not asked again ---------------------
+
+
+def test_an_ssn_read_off_the_dd214_is_not_asked_for():
+    from src import intake_chat
+
+    session = identity_session()
+    session.claim.veteran.ssn = "000000000"
+    intake_chat.apply_answer(session, "3114 Elm Street, Tucson, AZ 85701")
+
+    assert intake_chat.next_question(session).slot != intake_chat.Slot.SSN
+
+
+def test_the_home_of_record_is_offered_as_an_address_but_never_assumed():
+    """Block 7b is where they lived when they enlisted - often long stale."""
+    from src import intake_chat
+
+    session = identity_session()
+    session.claim.veteran.home_of_record = "3114 ELM STREET, TUCSON, AZ 85701"
+
+    question = intake_chat.next_question(session)
+    assert question.slot == intake_chat.Slot.ADDRESS
+    assert question.options == ["3114 ELM STREET, TUCSON, AZ 85701"]
+    # Offered only: nothing is on the claim until the veteran picks it.
+    assert not session.claim.veteran.address.is_complete
+
+
+def test_the_records_step_always_names_medical_records():
+    """It briefly said only 'anything else to add?', which tells nobody what
+    is wanted -- and the DD-214 already counts as a document."""
+    from src import intake_chat
+    from src.models import EvidenceType
+
+    session = records_session()
+    assert "medical records" in intake_chat.next_question(session).text.lower()
+
+    ClaimIntake(session.claim).add_evidence(EvidenceType.DD214)
+    assert "medical records" in intake_chat.next_question(session).text.lower()

@@ -97,7 +97,7 @@ class ClaimStore:
         veteran_columns = {row["name"] for row in
                            self.connection.execute("PRAGMA table_info(veterans)")}
         for column in ("middle_name TEXT", "ssn TEXT", "va_file_number TEXT",
-                       "address_json TEXT"):
+                       "home_of_record TEXT", "address_json TEXT"):
             name = column.split()[0]
             if veteran_columns and name not in veteran_columns:
                 self.connection.execute(f"ALTER TABLE veterans ADD COLUMN {column}")
@@ -203,8 +203,8 @@ class ClaimStore:
             """
             INSERT INTO veterans (id, first_name, last_name, middle_name, dob, email, phone,
                                   branch, service_start, service_end, discharge_type,
-                                  ssn, va_file_number, address_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  ssn, va_file_number, home_of_record, address_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 first_name=excluded.first_name, last_name=excluded.last_name,
                 middle_name=excluded.middle_name,
@@ -212,6 +212,7 @@ class ClaimStore:
                 branch=excluded.branch, service_start=excluded.service_start,
                 service_end=excluded.service_end, discharge_type=excluded.discharge_type,
                 ssn=excluded.ssn, va_file_number=excluded.va_file_number,
+                home_of_record=excluded.home_of_record,
                 address_json=excluded.address_json
             """,
             (
@@ -221,7 +222,7 @@ class ClaimStore:
                 veteran.branch.value if veteran.branch else None,
                 _iso(veteran.service_start), _iso(veteran.service_end),
                 veteran.discharge_type.value,
-                veteran.ssn, veteran.va_file_number,
+                veteran.ssn, veteran.va_file_number, veteran.home_of_record,
                 veteran.address.model_dump_json(),
             ),
         )

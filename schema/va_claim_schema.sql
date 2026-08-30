@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS veterans (
     discharge_type TEXT NOT NULL DEFAULT 'unknown',
     ssn TEXT,
     va_file_number TEXT,
+    home_of_record TEXT,
     address_json TEXT
 );
 

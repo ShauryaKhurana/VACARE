@@ -86,6 +86,14 @@ DOCUMENT_SCHEMA = {
                      "dishonorable", "uncharacterized", "unknown"],
         },
         "decision_date": {"type": "string", "description": "For a decision letter: YYYY-MM-DD or empty"},
+        "ssn": {
+            "type": "string",
+            "description": "Social Security number exactly as printed, digits or dashes",
+        },
+        "home_of_record": {
+            "type": "string",
+            "description": "DD-214 block 7b home of record, as one line",
+        },
         "still_serving": {
             "type": "boolean",
             "description": "True only for separation orders: the member has not separated yet",
@@ -250,10 +258,11 @@ def extract_from_document(attachment: Attachment) -> Dict[str, Any]:
     prompt = (
         "Identify this document and extract what it proves for a VA disability claim.\n\n"
         "If it is a DD-214, you MUST fill in every identity field from these blocks: "
-        "block 1 (name, printed LAST, FIRST MIDDLE), block 2 (branch), block 5 or 6 "
-        "(date of birth), block 12a (date entered active duty), block 12b (separation "
-        "date), block 24 (character of service). VA prints dates as 'YYYY MM DD' - "
-        "convert them to YYYY-MM-DD.\n"
+        "block 1 (name, printed LAST, FIRST MIDDLE), block 2 (branch), block 3 (Social "
+        "Security number), block 5 or 6 (date of birth), block 7b (home of record), "
+        "block 12a (date entered active duty), block 12b (separation date), block 24 "
+        "(character of service). VA prints dates as 'YYYY MM DD' - convert them to "
+        "YYYY-MM-DD.\n"
         "If it is a medical record, list the diagnosed conditions, whether treatment is "
         "ongoing, and the treating providers. For onset_date, use any phrase that dates the "
         "condition - 'since 2011', 'present since the 2012 deployment', 'onset following' - "
@@ -341,4 +350,15 @@ def veteran_fields_from(payload: Dict[str, Any]) -> Dict[str, Any]:
         value = _clean(payload.get(key))
         if value:
             fields[key] = value
+
+    ssn = _clean(payload.get("ssn"))
+    if ssn:
+        digits = "".join(character for character in ssn if character.isdigit())
+        if len(digits) == 9:
+            fields["ssn"] = digits
+
+    home = _clean(payload.get("home_of_record"))
+    if home:
+        fields["home_of_record"] = home
+
     return fields

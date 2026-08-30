@@ -159,6 +159,9 @@ class Veteran(BaseModel):
     # filled completely rather than handed over with gaps.
     ssn: Optional[str] = None
     va_file_number: Optional[str] = None
+    # DD-214 block 7b. Their address when they joined, so it is offered as a
+    # suggestion rather than used as the mailing address outright.
+    home_of_record: Optional[str] = None
     address: MailingAddress = Field(default_factory=MailingAddress)
 
     @field_validator("ssn")

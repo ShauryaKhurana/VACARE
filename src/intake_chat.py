@@ -400,11 +400,20 @@ def next_question(session: Session) -> Question:
         if claim.veteran.address.is_complete:
             session.address_done = True
         else:
+            suggestion = claim.veteran.home_of_record
             return Question(
                 slot=Slot.ADDRESS,
                 text="What's your mailing address? The VA sends letters there.",
-                help_text="Street, city, state and ZIP. Example: "
-                          "3114 Elm Street, Tucson, AZ 85701",
+                help_text=(
+                    "Street, city, state and ZIP. Example: "
+                    "3114 Elm Street, Tucson, AZ 85701"
+                    if not suggestion else
+                    "Your DD-214 lists the address below from when you joined. "
+                    "Use it if you're still there, or type your current one."
+                ),
+                # Offered, never assumed: block 7b is where they lived when
+                # they enlisted, which for most veterans is years out of date.
+                options=[suggestion] if suggestion else [],
             )
 
     if not session.ssn_done:
@@ -457,7 +466,8 @@ def next_question(session: Session) -> Question:
             text=(
                 "Upload any doctor or VA medical records you have."
                 if not claim.evidence else
-                f"Anything else to add? I've read {len(claim.evidence)} document"
+                f"Any doctor or VA medical records to add? I've read "
+                f"{len(claim.evidence)} document"
                 f"{'s' if len(claim.evidence) != 1 else ''} so far."
             ),
             help_text="Upload one or more files, then tap Done when finished.",

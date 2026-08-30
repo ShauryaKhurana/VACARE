@@ -336,6 +336,12 @@ def _merge_veteran(claim: Claim, fields: Dict[str, Any]) -> List[str]:
             applied.append("branch")
         except ValueError:
             pass
+    if fields.get("ssn") and not veteran.ssn:
+        veteran.ssn = fields["ssn"]
+        applied.append("Social Security number")
+    if fields.get("home_of_record") and not veteran.home_of_record:
+        veteran.home_of_record = fields["home_of_record"]
+
     if fields.get("discharge_type") and veteran.discharge_type == DischargeType.UNKNOWN:
         try:
             veteran.discharge_type = DischargeType(fields["discharge_type"])
@@ -403,6 +409,9 @@ def format_parsed_receipt(
         discharge = _display_discharge(veteran.discharge_type)
         if discharge:
             lines.append(f"Character of service: {discharge.title()}")
+        if veteran.ssn:
+            # Last four only: enough to check, and it stays off a shared screen.
+            lines.append(f"Social Security number: xxx-xx-{veteran.ssn[5:]}")
         if not lines:
             lines.append("I recognized this as a DD-214 but couldn't pull specific fields — you may need to type them.")
         return headline, intro + "\n" + "\n".join(f"• {line}" for line in lines)

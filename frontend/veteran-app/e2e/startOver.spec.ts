@@ -64,7 +64,9 @@ test("start over still works after a reload", async ({ page }) => {
 test("a thread stored with stacked cards restores showing only one", async ({ page }) => {
   // A build before this fix persisted a card per turn, so returning veterans
   // have a stack sitting in localStorage. Seed exactly that and reload.
-  const routingId = "route-seeded-stack-test";
+  // Unique per run: a fixed id collided with claims left by earlier tests,
+  // which made this flaky rather than wrong.
+  const routingId = `route-seeded-stack-${Date.now()}`;
   const stacked = [
     { id: "m1", type: "ai-text", text: "What hurts or bothers you?" },
     { id: "m2", type: "document-upload", prompt: "You can upload a photo or PDF here", documentType: "dd214" },
