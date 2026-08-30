@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { IconMicrophone, IconMicrophoneOff, IconSend, IconPaperclip } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useAccessibilityStore } from "@/lib/store/accessibilityStore";
@@ -20,6 +20,16 @@ interface MinimalSpeechRecognition extends EventTarget {
 }
 
 type SpeechRecognitionConstructor = new () => MinimalSpeechRecognition;
+
+/** Imperative escape hatch for callers that need to populate the composer
+ * without sending -- e.g. a quick-action chip that prefills a starting
+ * point for a message the veteran still has to review and send themselves.
+ * `text` stays fully internal state otherwise; this is the one deliberate
+ * crack in that encapsulation. */
+export interface ChatInputBarHandle {
+  setDraft: (text: string) => void;
+  focus: () => void;
+}
 
 function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
   if (typeof window === "undefined") return null;
@@ -41,30 +51,41 @@ function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
  * one is ever visible at a given viewport via md:, same pattern as
  * ChatThread's own dual mobile/desktop composition.
  */
-export function ChatInputBar({
-  onSend,
-  onAttach,
-  disabled,
-}: {
-  onSend: (text: string) => void;
-  /** Receives the prepared file itself, not just its name: the composer
-   *  previously announced "Attached: X" in the thread and dropped the file. */
-  onAttach: (file: Blob, fileName: string) => Promise<void> | void;
-  disabled?: boolean;
-}) {
+export const ChatInputBar = forwardRef<
+  ChatInputBarHandle,
+  {
+    onSend: (text: string) => void;
+    /** Receives the prepared file itself, not just its name: the composer
+     *  previously announced "Attached: X" in the thread and dropped the file. */
+    onAttach: (file: Blob, fileName: string) => Promise<void> | void;
+    disabled?: boolean;
+  }
+>(function ChatInputBar({ onSend, onAttach, disabled }, ref) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const voiceDefault = useAccessibilityStore((s) => s.voiceInputDefault);
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const desktopTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
+
+  // Only one of the two textareas below is ever visible (md: swap) -- calling
+  // focus() on both is harmless, since a display:none element silently
+  // declines focus, so whichever one is actually on screen wins.
+  useImperativeHandle(ref, () => ({
+    setDraft: (value: string) => setText(value),
+    focus: () => {
+      mobileTextareaRef.current?.focus();
+      desktopTextareaRef.current?.focus();
+    },
+  }));
 
   useEffect(() => {
     // Deferred until after mount: SpeechRecognition is a browser-only API,
     // and checking it during render would make the client's first render
     // disagree with the server-rendered markup.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVoiceSupported(getSpeechRecognitionCtor() !== null);
   }, []);
 
@@ -166,6 +187,7 @@ export function ChatInputBar({
         </label>
         <textarea
           id="chat-input-mobile"
+          ref={mobileTextareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -205,6 +227,7 @@ export function ChatInputBar({
           </label>
           <textarea
             id="chat-input-desktop"
+            ref={desktopTextareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -243,4 +266,4 @@ export function ChatInputBar({
       </form>
     </>
   );
-}
+});
