@@ -9,6 +9,18 @@ from src.document_ingest import ingest_document
 from src.models import Claim, EvidenceType, Veteran
 from tests.test_extract import DD214_PAYLOAD, MEDICAL_RECORD_PAYLOAD
 
+import pytest
+
+
+@pytest.fixture
+def parse_cache_on(monkeypatch):
+    """Reuse is off by default -- every upload is read afresh -- so tests that
+    are specifically about the cache have to switch it on."""
+    monkeypatch.setenv("VACARE_PARSE_CACHE", "1")
+
+
+uses_parse_cache = pytest.mark.usefixtures("parse_cache_on")
+
 
 def test_ingest_without_gemini_stores_file_only(tmp_path, monkeypatch):
     monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
@@ -50,6 +62,7 @@ def test_ingest_reparses_dd214_when_already_on_file(mock_extract, tmp_path, monk
 
 
 @patch("src.document_ingest.extract.extract_from_document", return_value=DD214_PAYLOAD)
+@uses_parse_cache
 def test_ingest_reuses_parse_cache_for_same_bytes(mock_extract, tmp_path, monkeypatch):
     monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
     monkeypatch.setattr("src.gemini.available", lambda: True)
@@ -67,6 +80,7 @@ def test_ingest_reuses_parse_cache_for_same_bytes(mock_extract, tmp_path, monkey
 
 
 @patch("src.document_ingest.extract.extract_from_document", return_value=DD214_PAYLOAD)
+@uses_parse_cache
 def test_ingest_reuses_disk_parse_cache_after_memory_cleared(mock_extract, tmp_path, monkeypatch):
     monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
     monkeypatch.setattr("src.gemini.available", lambda: True)
@@ -100,6 +114,7 @@ def test_ingest_medical_record_adds_conditions(mock_extract, tmp_path, monkeypat
 
 
 @patch("src.document_ingest.extract.extract_from_document", return_value=MEDICAL_RECORD_PAYLOAD)
+@uses_parse_cache
 def test_medical_record_reuses_disk_cache(mock_extract, tmp_path, monkeypatch):
     monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
     monkeypatch.setattr("src.gemini.available", lambda: True)

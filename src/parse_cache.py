@@ -1,12 +1,22 @@
-"""Persist successful document parses so repeat uploads skip the AI API.
+"""Persist successful document parses so repeat uploads can skip the AI API.
 
-The in-memory map is fast; disk survives server restarts and "Start over" in chat.
+Off by default: every upload is read afresh, even a file seen before. Reusing
+a stored parse saves an API call, but it also means a document is only ever
+interpreted as well as it was the first time — by whatever prompt and schema
+happened to be current then, on whatever claim uploaded it first. Re-reading
+is slower and costs a call; it is also what people expect when they upload a
+document.
+
+Set VACARE_PARSE_CACHE=1 to turn reuse back on.
+
+The in-memory map is fast; disk survives server restarts and "Start over".
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -26,6 +36,13 @@ def document_field_keys() -> tuple:
     return tuple(extract.DOCUMENT_SCHEMA["properties"].keys())
 
 _MEMORY: Dict[str, Dict[str, Any]] = {}
+
+
+def enabled() -> bool:
+    """Whether a stored parse may be reused instead of re-reading the file."""
+    return os.environ.get("VACARE_PARSE_CACHE", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
 
 
 def file_hash(data: bytes) -> str:
@@ -58,6 +75,8 @@ def document_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get(data: bytes) -> Optional[Dict[str, Any]]:
+    if not enabled():
+        return None
     key = file_hash(data)
     cached = _MEMORY.get(key)
     if cached is not None:
@@ -77,6 +96,8 @@ def get(data: bytes) -> Optional[Dict[str, Any]]:
 
 
 def store(data: bytes, payload: Dict[str, Any]) -> None:
+    if not enabled():
+        return          # nothing reads it, so do not accumulate stale parses
     doc_payload = document_fields(payload)
     if not doc_payload.get("document_type"):
         return

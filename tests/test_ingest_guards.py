@@ -371,3 +371,61 @@ def test_the_records_step_always_names_medical_records():
 
     ClaimIntake(session.claim).add_evidence(EvidenceType.DD214)
     assert "medical records" in intake_chat.next_question(session).text.lower()
+
+
+# --- every upload is read afresh --------------------------------------------
+
+
+def test_a_previously_seen_file_is_read_again_by_default(monkeypatch, tmp_path):
+    """A stored parse is only ever as good as the day it was made."""
+    from src import document_ingest, gemini, extract, parse_cache
+
+    monkeypatch.delenv("VACARE_PARSE_CACHE", raising=False)
+    monkeypatch.setattr(document_ingest, "UPLOAD_ROOT", tmp_path)
+
+    payload = {
+        "document_type": "dd214", "confidence": "high", "summary": "DD-214",
+        "first_name": "Dana", "last_name": "Reyes", "date_of_birth": "1988-03-12",
+        "service_start": "2007-06-01", "service_end": "2013-08-30",
+    }
+    calls = {"n": 0}
+
+    def counted(attachment):
+        calls["n"] += 1
+        return payload
+
+    monkeypatch.setattr(gemini, "available", lambda: True)
+    monkeypatch.setattr(extract, "extract_from_document", counted)
+
+    for _ in range(2):
+        document_ingest.ingest_document(claim_for(), "dd214.pdf", b"identical bytes")
+
+    assert calls["n"] == 2, "the second upload reused a stored parse"
+    assert not parse_cache.enabled()
+
+
+def test_reuse_can_be_switched_back_on(monkeypatch, tmp_path):
+    from src import document_ingest, gemini, extract, parse_cache
+
+    monkeypatch.setenv("VACARE_PARSE_CACHE", "1")
+    monkeypatch.setattr(document_ingest, "UPLOAD_ROOT", tmp_path)
+    monkeypatch.setattr(parse_cache, "_MEMORY", {})
+
+    payload = {
+        "document_type": "dd214", "confidence": "high", "summary": "DD-214",
+        "first_name": "Dana", "last_name": "Reyes", "date_of_birth": "1988-03-12",
+        "service_start": "2007-06-01", "service_end": "2013-08-30",
+    }
+    calls = {"n": 0}
+
+    def counted(attachment):
+        calls["n"] += 1
+        return payload
+
+    monkeypatch.setattr(gemini, "available", lambda: True)
+    monkeypatch.setattr(extract, "extract_from_document", counted)
+
+    for _ in range(2):
+        document_ingest.ingest_document(claim_for(), "dd214.pdf", b"other bytes")
+
+    assert calls["n"] == 1, "the cache was on but the file was read twice"
