@@ -10,6 +10,15 @@ if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// Same gap, same fix, for Element.scrollTo -- CaseConversation's own
+// scroll-region autoscroll now calls el.scrollTo() directly (rather than
+// bottomRef.scrollIntoView(), which used to bubble the scroll up through
+// every ancestor scroll container, including the page-level one) so it only
+// ever scrolls its own message list. jsdom doesn't implement it either.
+if (typeof Element !== "undefined" && !Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {};
+}
+
 afterEach(() => {
   cleanup();
 });

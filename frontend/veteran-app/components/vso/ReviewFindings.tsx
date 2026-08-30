@@ -51,8 +51,13 @@ function ReviewCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-text-primary">{item.finding}</p>
+      {/* flex-wrap: at a narrow viewport combined with the accessibility
+          text-scale control turned up, a long finding sentence left no room
+          for ComputedTag on the same unbreakable row, pushing it past the
+          viewport edge with no way to scroll back to it (confirmed via
+          getBoundingClientRect, not just a screenshot glance). */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 text-sm text-text-primary">{item.finding}</p>
         <ComputedTag className="shrink-0" />
       </div>
 
@@ -90,7 +95,16 @@ function ReviewCard({
           <ComputedTag label={`Suggested: ${REVIEW_STATE_LABELS[item.suggested_state]}`} />
           {decision && <StatusTag variant={REVIEW_STATE_VARIANT[decision]} label={REVIEW_STATE_LABELS[decision]} />}
         </div>
-        <div className="flex items-center gap-1.5" role="group" aria-label="Review decision">
+        {/* flex-wrap: three buttons (Confirm/Needs review/Reject) with no
+            wrap meant that at mobile width + the accessibility text-scale
+            control's higher settings, "Reject" -- and part of "Needs
+            review" -- rendered up to 166px past the viewport's right edge,
+            clipped by body's overflow-hidden with no way to reach or click
+            it at all. Same class of bug as the sidebar's badge-overlap fix
+            earlier this session; caught here by measuring rendered rects
+            across the full viewport/scale matrix, not by eyeballing a
+            screenshot. */}
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Review decision">
           {DECISION_STATES.map((state) => (
             <Button
               key={state}

@@ -7,7 +7,15 @@ import { IconLogout, IconMenu2 } from "@tabler/icons-react";
 import { Logo } from "@/components/shared/Logo";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { VsoSidebarNav } from "@/components/vso/VsoSidebarNav";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useVsoStore } from "@/lib/store/vsoStore";
 
 const SIGNIN_PATH = "/vso/signin";
@@ -86,7 +94,7 @@ export default function VsoLayout({ children }: { children: React.ReactNode }) {
           (unchanged), plus a new hamburger trigger for the categorized nav
           drawer (Sheet below). Hidden at md: and above, where the rail
           takes over. */}
-      <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3 md:hidden">
+      <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-3 md:hidden">
         <div className="flex items-center gap-1">
           <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
             <SheetTrigger
@@ -94,19 +102,39 @@ export default function VsoLayout({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   aria-label="Open caseload navigation"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-text-secondary hover:bg-background hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  // Fixed pixel size, not h-9/w-9's rem units -- consistent
+                  // with the sidebar's chevron toggle fix (VsoSidebarNav):
+                  // a tap target doesn't need to inflate with the
+                  // accessibility text-scale control the way reading text
+                  // does.
+                  className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-control text-text-secondary hover:bg-background hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 />
               }
             >
               <IconMenu2 size={20} aria-hidden="true" />
             </SheetTrigger>
-            {/* Wider than the primitive's default, matching the desktop
-                rail's own 288px (w-72). Labels also wrap instead of
-                truncating (VsoSidebarNav) -- width alone can't be a
-                permanent fix once the text-scale accessibility control is
-                factored in, so this is extra breathing room, not the fix
-                itself. */}
-            <SheetContent side="left" className="w-[300px] sm:w-80">
+            {/* vw-relative, not a fixed px width: at the accessibility
+                text-scale control's 175% max, a nested category label
+                (e.g. "Deadlines approaching") needs real width to wrap at
+                word boundaries instead of mid-word -- a fixed 300px budget
+                (a prior version of this fix) genuinely isn't enough room
+                for that at max zoom on top of the icon/badge/chevron/indent
+                it shares the row with, verified by measuring the actual
+                rendered width of that row's label box. 90vw with a max
+                keeps this reasonable at 100% zoom (a comfortable drawer,
+                not full-screen) while scaling up the room available as the
+                viewport (and therefore the drawer) grows on larger
+                phones/tablets. */}
+            {/* data-[side=left]: prefix matters here, not just w-[90vw]
+                alone -- the primitive's own default is the variant-scoped
+                `data-[side=left]:w-3/4`, and a plain unscoped `w-[90vw]`
+                doesn't actually override it (confirmed by measuring the
+                rendered width: it stayed exactly 75% of the viewport).
+                Matching the same variant scope is what lets it win. */}
+            <SheetContent
+              side="left"
+              className="data-[side=left]:w-[90vw] data-[side=left]:max-w-[420px]"
+            >
               <SheetHeader className="border-b border-border">
                 <SheetTitle>Caseload</SheetTitle>
                 <SheetDescription>Jump straight to what needs your attention.</SheetDescription>
@@ -121,6 +149,38 @@ export default function VsoLayout({ children }: { children: React.ReactNode }) {
                   <VsoSidebarNav onNavigate={() => setDrawerOpen(false)} className="pt-2" />
                 </Suspense>
               </div>
+              {/* Identity + sign-out live here, not the top bar. A name and
+                  organization string next to a hamburger and the full Logo
+                  wordmark doesn't fit a 390px-wide header at 100% text scale
+                  under any amount of truncation -- rem-based Tailwind sizing
+                  means the icon badges and buttons grow with the
+                  accessibility text-scale control too, not just the text,
+                  so "make the header row wider" runs out of room by design
+                  once that control is turned up. Reproduced overflowing at
+                  every case page at the control's 175% max before this
+                  change; the drawer has an entire vertical page to work
+                  with instead, the same content simply moved to where
+                  there's actually room for it. */}
+              <SheetFooter className="border-t border-border">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-text-primary">{identity.name}</span>
+                  <span className="text-xs text-text-secondary">{identity.organization}</span>
+                  <span className="text-xs text-text-secondary">
+                    Accreditation #{identity.accreditationId}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    handleSignOut();
+                  }}
+                  className="flex items-center gap-2 self-start text-sm text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <IconLogout size={16} aria-hidden="true" />
+                  Sign out
+                </button>
+              </SheetFooter>
             </SheetContent>
           </Sheet>
           <Link
@@ -130,24 +190,25 @@ export default function VsoLayout({ children }: { children: React.ReactNode }) {
             <Logo variant="vso" className="text-base" />
           </Link>
         </div>
-        <div className="flex items-center gap-2.5">
-          <span className="flex flex-col items-end text-right leading-tight">
-            <span className="text-xs font-medium text-text-primary">{identity.name}</span>
-            <span className="text-[11px] text-text-secondary">{identity.organization}</span>
-          </span>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            aria-label="Sign out"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-text-secondary hover:bg-background hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <IconLogout size={18} aria-hidden="true" />
-          </button>
-        </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-row">
-        <aside className="hidden min-h-0 w-72 shrink-0 flex-col border-r border-border bg-surface md:flex">
+        {/* w-[306px], not w-72 -- w-72 is rem-based (18rem), and like the
+            mobile hamburger/chevron buttons fixed earlier this session, the
+            accessibility text-scale control scales EVERY rem unit off
+            html's font-size, not just font sizes: at the control's 175% max
+            this rail was rendering at 535.5px (18rem x 29.75px root
+            font-size) instead of its intended ~306px (18rem x 17px, this
+            app's un-scaled root size), eating nearly all the remaining
+            width on a tablet/narrow-desktop viewport and squeezing the main
+            column (a case detail page's veteran-summary grid, its header's
+            StatusTag) into overlapping, clipped garbage. Confirmed via
+            getBoundingClientRect, not a screenshot glance. A fixed pixel
+            width keeps the rail itself a stable piece of desktop chrome --
+            same reasoning as those buttons -- while everything rendered
+            inside it (VsoSidebarNav's labels, the identity block's text)
+            still scales and wraps normally. */}
+        <aside className="hidden min-h-0 w-[306px] shrink-0 flex-col border-r border-border bg-surface md:flex">
           <Link
             href="/vso"
             className="flex items-center px-6 py-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

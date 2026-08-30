@@ -186,7 +186,16 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
           Back to caseload
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
+          {/* flex-wrap + min-w-0 here too, not just on the row above: at a
+              narrow desktop width combined with the accessibility text-scale
+              control turned up, the name alone can out-grow the space this
+              inner group has left after the case id span claims its share --
+              without flex-wrap the StatusTag was pushed past the right edge
+              of the viewport and silently clipped by body's overflow-hidden
+              (invisible, no scrollbar, confirmed by measuring its rendered
+              rect rather than trusting a scrollWidth check, which this class
+              of bug doesn't move). */}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Avatar className="shrink-0">
               <AvatarFallback className="bg-accent-tint font-medium text-accent">
                 {veteranInitials(`${vsoCase.veteran.first_name} ${vsoCase.veteran.last_name}`)}

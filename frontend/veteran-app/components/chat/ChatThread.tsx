@@ -166,7 +166,6 @@ export function ChatThread() {
           // Deferred until after mount: localStorage is a browser-only API,
           // read once here rather than during render to avoid a hydration
           // mismatch against the server-rendered (empty) thread.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           const restored = pruneStaleAffordances(appendUnique([], parsed));
           setMessages(restored);
           setShowResumeBanner(true);

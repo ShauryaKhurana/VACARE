@@ -310,7 +310,12 @@ function CaseRowCard({
         type="button"
         onClick={() => onOpen(row.claim_id)}
         aria-label={`Open case for ${row.veteran_name}`}
-        className="flex min-w-0 w-full flex-col gap-1.5 rounded-card border border-border bg-surface p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        // hover:border-accent/40: the desktop table's rows get a hover
+        // background (shadcn's TableRow default); this card had focus-visible
+        // but nothing at all for hover, unlike every other clickable row/tile
+        // on this page -- worth having for a mouse+touchscreen hybrid device
+        // at a tablet width, where this card view (not the table) renders.
+        className="flex min-w-0 w-full flex-col gap-1.5 rounded-card border border-border bg-surface p-3 text-left transition-colors hover:border-accent/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <div className="flex items-start justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-text-primary">
@@ -744,7 +749,20 @@ function VsoInboxPageContent() {
   return (
     <TooltipProvider>
       <VsoPageContainer className="gap-5">
-        <div className="flex items-center justify-between gap-4">
+        {/* flex-wrap: without it, the title block and the Select/Refresh
+            buttons fought over one unbreakable row -- fine at 100% text
+            scale, but at a narrower desktop/tablet width combined with the
+            accessibility text-scale control turned up, the buttons got
+            pushed past the viewport's right edge. That overflow wasn't even
+            reachable by an obvious scrollbar: VsoPageContainer only sets
+            overflow-y-auto, but per the CSS spec a lone overflow-y-auto
+            forces the other axis's computed overflow-x to auto too (neither
+            can stay `visible` once one axis isn't), so the buttons were
+            technically scroll-reachable to the right with zero visual cue
+            that a page-level horizontal scroll existed at all. Wrapping is
+            the fix, same as the header row above the veteran-summary
+            grid on the case detail page. */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold text-text-primary">Caseload</h1>
             <p className="text-sm text-text-secondary">
@@ -922,7 +940,25 @@ function VsoInboxPageContent() {
 
           <div className="flex flex-wrap items-center gap-2">
             <SecondaryFilterControls
-              className="hidden items-center gap-2 sm:flex"
+              // lg:, not sm: -- at md: (768px) the desktop rail (w-72) is
+              // already claiming 288px, and three inline controls need
+              // ~390px on their own; sm:'s 640px threshold doesn't account
+              // for the rail at all, so a genuine tablet width (768px) had
+              // the raw search <input> computed down to a zero flex-basis
+              // (min-w-0 flex-1 shrinking to fit what was left after the
+              // controls), surviving only via the browser's built-in
+              // minimum input width and visually overlapping the first
+              // Select. Confirmed via getBoundingClientRect, not just a
+              // screenshot glance -- the search wrapper measured literally
+              // 0px wide. lg: (1024px) is the first breakpoint with enough
+              // room left after the rail for search + all three controls.
+              // flex-wrap: at the accessibility text-scale control's higher
+              // settings, three controls (Sort/Status/blockers checkbox)
+              // came in a few pixels wider than even lg:'s room -- letting
+              // this row wrap (down to its own second line, still well
+              // above the mobile Popover's breakpoint) absorbs that instead
+              // of pushing "Has blockers only" past the viewport edge.
+              className="hidden flex-wrap items-center gap-2 lg:flex"
               sortKey={sortKey}
               onSortKeyChange={setSortKey}
               statusFilter={statusFilter}
@@ -932,7 +968,7 @@ function VsoInboxPageContent() {
             />
 
             <Popover>
-              <PopoverTrigger render={<Button variant="outline" size="sm" className="sm:hidden" />}>
+              <PopoverTrigger render={<Button variant="outline" size="sm" className="lg:hidden" />}>
                 <IconFilter size={14} aria-hidden="true" />
                 Filters
                 {secondaryActiveCount > 0 && (
