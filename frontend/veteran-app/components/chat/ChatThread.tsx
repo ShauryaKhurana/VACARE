@@ -225,6 +225,10 @@ export function ChatThread() {
   const isSparse = !claimSubmitted && messages.length <= 1 && !showResumeBanner;
   const greeting = messages[0]?.type === "ai-text" ? messages[0].text : null;
   const stepIndex = Math.min(stepsDone, DIG_STEPS.length - 1);
+  // Nothing to discard yet if the veteran hasn't moved past Service info --
+  // a claim that was already submitted is always a real thing to start over
+  // from, regardless of this dig's own step count.
+  const canStartOver = claimSubmitted || stepsDone > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -274,11 +278,13 @@ export function ChatThread() {
         <div className="mx-auto mt-2 flex w-full max-w-xl items-center justify-center gap-2 text-xs text-text-secondary md:max-w-2xl lg:max-w-3xl">
           <button
             type="button"
+            disabled={!canStartOver}
             onClick={() => {
               setRestartTarget(null);
               setRestartDialogOpen(true);
             }}
-            className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            aria-label={canStartOver ? undefined : "Start over -- available once you've moved past Service info"}
+            className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
           >
             Start over
           </button>
@@ -321,7 +327,11 @@ export function ChatThread() {
                   </div>
                 )}
 
-                {showResumeBanner && (
+                {/* Its "pick up right where you left off, getting your claim
+                    ready" copy only makes sense pre-submission -- once a
+                    claim is with a VSO, the pinned header above already
+                    says so, and this would otherwise contradict it. */}
+                {showResumeBanner && !claimSubmitted && (
                   <ResumeBanner onDismiss={() => setShowResumeBanner(false)} />
                 )}
 

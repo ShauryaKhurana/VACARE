@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { IconLockSquareRounded } from "@tabler/icons-react";
 import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import { VsoCard } from "@/components/you/VsoCard";
 import { AccentButton } from "@/components/shared/AccentButton";
+import { SignInCard } from "@/components/onboarding/SignInCard";
+import { PageTransition } from "@/components/shared/PageTransition";
+import { Spinner } from "@/components/shared/Spinner";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 
 type Step = "matching" | "connected" | "redirecting" | "sign-in";
 
@@ -15,7 +18,6 @@ export default function ConnectPage() {
   const router = useRouter();
   const routingId = useSessionStore((s) => s.routingId);
   const [step, setStep] = useState<Step>("matching");
-  const [email, setEmail] = useState("");
 
   const { data: claim } = useQuery({
     queryKey: ["claim", routingId],
@@ -34,98 +36,64 @@ export default function ConnectPage() {
     return () => clearTimeout(t);
   }, [step]);
 
+  let content: React.ReactNode;
+
   if (step === "redirecting") {
-    return (
+    content = (
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center md:max-w-2xl">
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-accent"
-          role="status"
-          aria-label="Redirecting you to sign in"
-        />
+        <Spinner label="Redirecting you to sign in" />
         <p className="text-sm text-text-secondary">Redirecting you to sign in…</p>
       </div>
     );
-  }
-
-  if (step === "sign-in") {
-    return (
+  } else if (step === "sign-in") {
+    content = (
+      <SignInCard
+        heading="Sign in to save your progress"
+        description="VA.gov verifies your identity through Login.gov or ID.me before linking a claim to your account -- this preview simulates that step, so nothing here is a real sign-in."
+        onSubmit={() => router.push("/claim")}
+      />
+    );
+  } else {
+    content = (
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-5 px-4 py-10 text-center md:max-w-2xl">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
-          <IconLockSquareRounded size={32} aria-hidden="true" />
-        </div>
-        <div className="flex max-w-sm flex-col gap-2 md:max-w-md">
-          <h1 className="text-2xl font-medium text-text-primary">Sign in to save your progress</h1>
-          <p className="text-sm text-text-secondary">
-            VA.gov verifies your identity through Login.gov or ID.me before linking a claim to
-            your account -- this preview simulates that step, so nothing here is a real sign-in.
-          </p>
-        </div>
+        <h1 className="text-2xl md:text-3xl font-medium text-text-primary">
+          {step === "matching" ? "Finding your VSO…" : "You're connected"}
+        </h1>
 
-        <form
-          className="flex w-full max-w-sm flex-col gap-3 text-left md:max-w-md"
-          onSubmit={(e) => {
-            e.preventDefault();
-            router.push("/claim");
-          }}
-        >
-          <label htmlFor="connect-email" className="text-sm font-medium text-text-primary">
-            Email
-          </label>
-          <input
-            id="connect-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            className="rounded-control border border-border bg-surface px-3 py-2.5 text-base text-text-primary outline-none focus-visible:border-accent"
+        {step === "matching" || !claim ? (
+          <LoadingSkeleton
+            label="Matching you with a VSO"
+            className="h-24 max-w-sm md:max-w-md"
           />
-          <p className="text-xs text-text-secondary">
-            Only used so you can sign back in later -- not shared with your VSO or VA, and not
-            stored anywhere in this preview.
-          </p>
-          <AccentButton type="submit" className="mt-1 w-full">
-            Continue
-          </AccentButton>
-        </form>
+        ) : (
+          <>
+            <div className="w-full max-w-sm text-left md:max-w-md">
+              <VsoCard vso={claim.vso} />
+            </div>
+            <div className="w-full max-w-sm text-left md:max-w-md">
+              <h2 className="text-sm font-medium text-text-primary">What happens next</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                {claim.vso.name} typically reviews a claim like yours within a few business days
+                and may reach out with questions. A real, credentialed person -- not a black box --
+                is now handling your claim.
+              </p>
+            </div>
+            <AccentButton
+              type="button"
+              onClick={() => setStep("redirecting")}
+              className="w-full max-w-sm md:max-w-md"
+            >
+              Continue to my claim
+            </AccentButton>
+          </>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-5 px-4 py-10 text-center md:max-w-2xl">
-      <h1 className="text-2xl md:text-3xl font-medium text-text-primary">
-        {step === "matching" ? "Finding your VSO…" : "You're connected"}
-      </h1>
-
-      {step === "matching" || !claim ? (
-        <div
-          className="h-24 w-full max-w-sm animate-pulse rounded-card border border-border bg-accent-tint/40 md:max-w-md"
-          role="status"
-          aria-label="Matching you with a VSO"
-        />
-      ) : (
-        <>
-          <div className="w-full max-w-sm text-left md:max-w-md">
-            <VsoCard vso={claim.vso} />
-          </div>
-          <div className="w-full max-w-sm text-left md:max-w-md">
-            <h2 className="text-sm font-medium text-text-primary">What happens next</h2>
-            <p className="mt-1 text-sm text-text-secondary">
-              {claim.vso.name} typically reviews a claim like yours within a few business days and
-              may reach out with questions. A real, credentialed person -- not a black box -- is
-              now handling your claim.
-            </p>
-          </div>
-          <AccentButton
-            type="button"
-            onClick={() => setStep("redirecting")}
-            className="w-full max-w-sm md:max-w-md"
-          >
-            Continue to my claim
-          </AccentButton>
-        </>
-      )}
-    </div>
+    <PageTransition transitionKey={step} className="flex min-h-0 flex-1 flex-col">
+      {content}
+    </PageTransition>
   );
 }

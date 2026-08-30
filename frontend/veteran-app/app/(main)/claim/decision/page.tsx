@@ -15,6 +15,7 @@ import {
   DECISION_FIXTURE_ROUTING_IDS,
 } from "@/components/dev/FixtureSwitcher";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { IconListDetails } from "@tabler/icons-react";
 
 export default function DecisionPage() {
@@ -41,11 +42,7 @@ function DecisionPageContent() {
   if (isLoading || !claim?.decision) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
-        <div
-          className="h-32 w-full max-w-md animate-pulse rounded-card border border-border bg-accent-tint/40"
-          role="status"
-          aria-label="Loading your decision"
-        />
+        <LoadingSkeleton label="Loading your decision" />
       </div>
     );
   }

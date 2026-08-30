@@ -6,12 +6,14 @@ export function Toggle({
   description,
   checked,
   onCheckedChange,
+  disabled,
 }: {
   id: string;
   label: string;
   description?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
@@ -23,7 +25,7 @@ export function Toggle({
           <p className="mt-0.5 text-sm text-text-secondary">{description}</p>
         ) : null}
       </div>
-      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   );
 }

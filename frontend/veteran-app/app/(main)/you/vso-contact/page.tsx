@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import { VsoCard } from "@/components/you/VsoCard";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 
 export default function VsoContactPage() {
   const routingId = useSessionStore((s) => s.routingId);
@@ -27,11 +28,7 @@ export default function VsoContactPage() {
       <h1 className="text-2xl md:text-3xl font-medium text-text-primary">Your VSO</h1>
 
       {isLoading || !claim ? (
-        <div
-          className="h-32 w-full animate-pulse rounded-card border border-border bg-accent-tint/40"
-          role="status"
-          aria-label="Loading your VSO's information"
-        />
+        <LoadingSkeleton label="Loading your VSO's information" className="max-w-none" />
       ) : (
         <VsoCard vso={claim.vso} />
       )}

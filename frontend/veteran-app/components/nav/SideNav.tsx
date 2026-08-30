@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconShieldCheck } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { NAV_TABS } from "@/components/nav/navTabs";
+import { useSessionStore } from "@/lib/store/sessionStore";
+import { Logo } from "@/components/shared/Logo";
 
 /**
  * Desktop-only counterpart to BottomNav (md:hidden there, hidden below md
@@ -14,23 +15,22 @@ import { NAV_TABS } from "@/components/nav/navTabs";
  */
 export function SideNav() {
   const pathname = usePathname();
+  const hasEverSubmitted = useSessionStore((s) => s.hasEverSubmitted);
+  const tabs = NAV_TABS.filter((tab) => !tab.requiresSubmission || hasEverSubmitted);
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
       <Link
         href="/claim"
-        className="flex items-center gap-3 px-6 py-7 text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex items-center px-6 py-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
-          <IconShieldCheck size={24} aria-hidden="true" />
-        </span>
-        <span className="text-xl font-medium tracking-wide">VA CARE</span>
+        <Logo />
       </Link>
 
       <div className="mx-6 border-t border-border" />
 
       <nav aria-label="Primary" className="flex flex-col gap-1 px-3 py-4">
-        {NAV_TABS.map(({ href, label, icon: Icon }) => {
+        {tabs.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

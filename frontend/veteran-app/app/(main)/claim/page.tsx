@@ -15,6 +15,7 @@ import { ResolvedBanner } from "@/components/claim/ResolvedBanner";
 import { FixtureSwitcher, CLAIM_FIXTURE_ROUTING_IDS } from "@/components/dev/FixtureSwitcher";
 import { IconMessageCircle2, IconBadge, IconAlertTriangle, IconCalendarEvent, IconHistory } from "@tabler/icons-react";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 
 export default function ClaimPage() {
   return (
@@ -40,11 +41,7 @@ function ClaimPageContent() {
   if (isLoading || !claim) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
-        <div
-          className="h-32 w-full max-w-md animate-pulse rounded-card border border-border bg-accent-tint/40"
-          role="status"
-          aria-label="Loading your claim"
-        />
+        <LoadingSkeleton label="Loading your claim" />
       </div>
     );
   }

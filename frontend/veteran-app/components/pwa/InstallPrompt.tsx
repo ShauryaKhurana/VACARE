@@ -9,13 +9,15 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-function isStandalone(): boolean {
+/** Exported for the Notifications page, which needs the same "is this actually installed" check to decide whether push can be offered at all. */
+export function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   const nav = navigator as Navigator & { standalone?: boolean };
   return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
 }
 
-function isIos(): boolean {
+/** Exported for the Notifications page's install instructions, which differ on iOS (no one-tap install prompt exists there). */
+export function isIos(): boolean {
   if (typeof navigator === "undefined") return false;
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }

@@ -154,3 +154,22 @@ export function resetChatScript(routingId: string): void {
 export function rewindChatScript(routingId: string, toTurnIndex: number): void {
   setStoredTurnIndex(routingId, Math.max(0, toTurnIndex));
 }
+
+/**
+ * Pre-seeds Talk's message history for a returning veteran signing into an
+ * already-active claim (Welcome's "Already registered?" path), so the
+ * thread opens on a status message instead of running the fresh-intake
+ * greeting script from turn 0 -- that script assumes nothing has happened
+ * yet, which isn't true for someone whose claim is already with a VSO.
+ */
+export function seedReturningVeteranWelcome(routingId: string, vsoName: string): void {
+  if (typeof window === "undefined") return;
+  const message: ChatMessage[] = [
+    {
+      id: nextId(),
+      type: "ai-text",
+      text: `Welcome back. Your claim is with ${vsoName} -- send a message here any time and I'll pass it along.`,
+    },
+  ];
+  window.localStorage.setItem(chatMessagesKey(routingId), JSON.stringify(message));
+}
