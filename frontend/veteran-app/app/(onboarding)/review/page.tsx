@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccentButton } from "@/components/shared/AccentButton";
 import { ComputedTag } from "@/components/shared/ComputedTag";
-import { apiClient } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/store/sessionStore";
 import { IconPencil, IconArrowLeft } from "@tabler/icons-react";
 
@@ -47,15 +46,20 @@ export default function ReviewPage() {
   const router = useRouter();
   const routingId = useSessionStore((s) => s.routingId);
   const completeOnboarding = useSessionStore((s) => s.completeOnboarding);
-  const submitClaim = useSessionStore((s) => s.submitClaim);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleConfirm() {
+  /**
+   * This no longer actually sends the claim to the VSO -- confirming here
+   * used to fire confirmClaimDraft/submitClaim before the veteran had even
+   * signed in, so an unauthenticated visitor could transmit a claim. The
+   * real submission now happens at Connect's sign-in step; this just marks
+   * the dig finished (completeOnboarding, unchanged -- the root redirect
+   * depends on it to resume an abandoned session correctly) and hands off.
+   */
+  function handleConfirm() {
     if (!routingId) return;
     setSubmitting(true);
-    await apiClient.confirmClaimDraft(routingId);
     completeOnboarding();
-    submitClaim();
     router.push("/connect");
   }
 

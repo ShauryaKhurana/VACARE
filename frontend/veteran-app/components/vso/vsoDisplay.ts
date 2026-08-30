@@ -6,8 +6,11 @@
 // "No duplication" -- one file to change if any of this wording moves).
 
 import type { StatusVariant } from "@/components/shared/StatusTag";
+import type { TriageLane } from "@/lib/api/vso/client";
+import type { DeadlineFilter, SortKey } from "@/lib/store/vsoStore";
 import type {
   Branch,
+  ClaimStatus,
   DischargeType,
   ReviewCategory,
   ReviewSuggestedState,
@@ -130,4 +133,144 @@ export function resolveRuleProvenance(
   return ruleResultIds
     .map((id) => byRuleId.get(id))
     .filter((hit): hit is RuleResultResponse => hit !== undefined);
+}
+
+/** Thresholds in seconds under which a timestamp reads as "Nm ago"/"Nh ago"/
+ * "Nd ago" -- past this, the day count stops being a useful mental unit
+ * (plan: match Gmail/Front/Linear's relative-time convention), so the row
+ * falls back to a short absolute date instead of e.g. "47d ago". */
+const RELATIVE_TIME_DAY_CUTOFF = 30;
+
+/**
+ * Humanizes a timestamp for the inbox's "Last activity" column and the case
+ * conversation's message rows -- both previously showed a bare date or a
+ * fixed clock time, which doesn't answer the question a VSO scanning a
+ * queue actually has ("how stale is this?") as quickly as "2d ago" does.
+ * `now` is a parameter (not read internally via `new Date()`) purely so
+ * this stays pure and testable against a fixed clock; every call site
+ * outside tests just omits it.
+ */
+export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+
+  const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
+  // Clock skew or a message with a slightly-future timestamp (mock latency
+  // can land created_at a beat after the read) reads the same as "just
+  // now" rather than a confusing negative duration.
+  if (diffSeconds < 60) return "just now";
+
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < RELATIVE_TIME_DAY_CUTOFF) return `${diffDays}d ago`;
+
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+/**
+ * Two-letter initials for the inbox's/case header's avatar fallback --
+ * first letter of the first and last name tokens, or the first two letters
+ * of a single-word name. Never throws on empty/whitespace-only input (falls
+ * back to "?"), since `veteran_name` is server-formatted text the UI must
+ * still render something for.
+ */
+export function veteranInitials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+/** The inbox's full filter state -- search/sort/status/blockers (the raw
+ * controls) plus which triage lane, if any, a promoted "view" has isolated,
+ * plus the two sidebar-only dimensions (`deadlineFilter`, `unreadOnly`) that
+ * cut across lanes rather than picking one. Centralized here (rather than
+ * seven separate useState calls compared piecemeal) so "is anything
+ * non-default" and "does this match a saved view/preset" have exactly one
+ * shape to agree on. */
+export interface InboxFilterState {
+  search: string;
+  sortKey: SortKey;
+  statusFilter: ClaimStatus | "all";
+  onlyBlockers: boolean;
+  laneFilter: TriageLane | "all";
+  deadlineFilter: DeadlineFilter;
+  unreadOnly: boolean;
+}
+
+/** The inbox's out-of-the-box state -- what "Clear filters" resets to, and
+ * what a case's absence of any active filter is compared against. */
+export const DEFAULT_INBOX_FILTERS: InboxFilterState = {
+  search: "",
+  sortKey: "deadline",
+  statusFilter: "all",
+  onlyBlockers: false,
+  laneFilter: "all",
+  deadlineFilter: "all",
+  unreadOnly: false,
+};
+
+/** True when every control is at its default -- gates the "Clear filters"
+ * affordance (plan: only show it when there's something to clear) and
+ * whether the built-in "All cases" view reads as currently active. Search
+ * is trimmed so a stray space the veteran typed and deleted doesn't count
+ * as an active filter. */
+export function isFiltersDefault(filters: InboxFilterState): boolean {
+  return (
+    filters.search.trim() === DEFAULT_INBOX_FILTERS.search &&
+    filters.sortKey === DEFAULT_INBOX_FILTERS.sortKey &&
+    filters.statusFilter === DEFAULT_INBOX_FILTERS.statusFilter &&
+    filters.onlyBlockers === DEFAULT_INBOX_FILTERS.onlyBlockers &&
+    filters.laneFilter === DEFAULT_INBOX_FILTERS.laneFilter &&
+    filters.deadlineFilter === DEFAULT_INBOX_FILTERS.deadlineFilter &&
+    filters.unreadOnly === DEFAULT_INBOX_FILTERS.unreadOnly
+  );
+}
+
+/**
+ * Adds or removes one id from a selection set, immutably -- the inbox's
+ * bulk-select checkboxes and "select all in lane" affordance both reduce to
+ * this one operation. Returns a new Set rather than mutating so it's safe
+ * to call directly from a setState updater.
+ */
+export function toggleSelection(selected: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(selected);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return next;
+}
+
+/**
+ * Composes the default "request evidence" message for one case from its
+ * actual missing-required-evidence labels -- feedback on the first version
+ * of bulk requesting was that one identical, generic message to every
+ * selected veteran ("please upload outstanding documents") wasn't honest
+ * about what the tool actually knows: the checklist already has each
+ * veteran's specific gap, and burying that behind a form-letter reads as
+ * out of touch rather than efficient. Mirrors the single-case "Request from
+ * veteran" button's own phrasing (case detail page) -- `Please provide: X`
+ * -- so a veteran sees the same wording whether the ask came from a bulk
+ * action or an individual one. Falls back to a still-honest generic line
+ * only when the checklist has nothing specific to point to (e.g. a
+ * "waiting on veteran" case where the open ask isn't itself a checklist
+ * item), rather than fabricating a document name that isn't actually
+ * missing.
+ */
+export function defaultEvidenceRequestText(missingRequiredLabels: string[]): string {
+  if (missingRequiredLabels.length === 0) {
+    return "Could you let us know the status of the information we last asked for? We want to keep your claim moving.";
+  }
+  if (missingRequiredLabels.length === 1) {
+    return `Please provide: ${missingRequiredLabels[0]}.`;
+  }
+  const [last, ...rest] = [...missingRequiredLabels].reverse();
+  return `Please provide: ${rest.reverse().join(", ")}, and ${last}.`;
 }

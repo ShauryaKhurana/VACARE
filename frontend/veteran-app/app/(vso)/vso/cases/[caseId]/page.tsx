@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowLeft,
   IconChevronDown,
@@ -15,11 +15,18 @@ import {
 import { vsoApiClient } from "@/lib/api/vso/client";
 import { VsoPageContainer } from "@/components/vso/VsoPageContainer";
 import { ApprovalGate } from "@/components/vso/ApprovalGate";
-import { CaseConversation, caseMessagesKey } from "@/components/vso/CaseConversation";
+import { CaseConversation, caseMessagesKey, type CaseConversationHandle } from "@/components/vso/CaseConversation";
 import { ReviewFindings } from "@/components/vso/ReviewFindings";
-import { BRANCH_LABELS, DISCHARGE_LABELS, URGENCY_VARIANT, readinessBreakdown } from "@/components/vso/vsoDisplay";
+import {
+  BRANCH_LABELS,
+  DISCHARGE_LABELS,
+  URGENCY_VARIANT,
+  readinessBreakdown,
+  veteranInitials,
+} from "@/components/vso/vsoDisplay";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { StatusTag } from "@/components/shared/StatusTag";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useVsoStore } from "@/lib/store/vsoStore";
 import type { ChecklistItemResponse, ReviewSuggestedState } from "@/lib/api/vso/types";
@@ -43,6 +50,15 @@ function Def({ label, value }: { label: string; value: React.ReactNode }) {
 function evidenceKey(item: Pick<ChecklistItemResponse, "evidence_type" | "condition_name">): string {
   return `${item.evidence_type}::${item.condition_name ?? ""}`;
 }
+
+/** Applies to every read below except the conversation (its own polling
+ * query, left untouched). With no app-wide staleTime (lib/providers.tsx),
+ * every one of these was a full unstyled refetch-and-flash on any remount --
+ * including a plain "back" from the inbox seconds later. A mutation
+ * (approve, request info, a note) still invalidates these keys explicitly
+ * via invalidateCase/afterSend, which refetches regardless of staleTime --
+ * this only removes the redundant automatic refetch, not the real one. */
+const CASE_DETAIL_STALE_TIME_MS = 30_000;
 
 /**
  * The case review surface (plan Screen 2) -- desktop three-column, one
@@ -75,32 +91,37 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
   // there's no backend write to persist them yet.
   const [decisions, setDecisions] = useState<Record<string, ReviewSuggestedState>>({});
   const [packetOpen, setPacketOpen] = useState(false);
-  const [requestingKey, setRequestingKey] = useState<string | null>(null);
+  const conversationRef = useRef<CaseConversationHandle>(null);
 
   const caseQuery = useQuery({
     queryKey: ["vso-case", caseId],
     queryFn: () => vsoApiClient.getCase(caseId),
     retry: false,
+    staleTime: CASE_DETAIL_STALE_TIME_MS,
   });
   const checklistQuery = useQuery({
     queryKey: ["vso-checklist", caseId],
     queryFn: () => vsoApiClient.getChecklist(caseId),
     retry: false,
+    staleTime: CASE_DETAIL_STALE_TIME_MS,
   });
   const reviewQuery = useQuery({
     queryKey: ["vso-review", caseId],
     queryFn: () => vsoApiClient.getReviewItems(caseId),
     retry: false,
+    staleTime: CASE_DETAIL_STALE_TIME_MS,
   });
   const filingChecksQuery = useQuery({
     queryKey: ["vso-filing-checks", caseId],
     queryFn: () => vsoApiClient.getFilingChecks(caseId),
     retry: false,
+    staleTime: CASE_DETAIL_STALE_TIME_MS,
   });
   const packetQuery = useQuery({
     queryKey: ["vso-packet", caseId],
     queryFn: () => vsoApiClient.getPacket(caseId),
     enabled: packetOpen,
+    staleTime: CASE_DETAIL_STALE_TIME_MS,
   });
   // Shares CaseConversation's own query (same queryKey, react-query dedupes
   // the fetch) purely to know the newest message id for markCaseSeen --
@@ -124,16 +145,6 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
     // clicks back sees the case already moved out of "Needs you."
     void queryClient.invalidateQueries({ queryKey: ["vso-caseload"] });
   }
-
-  const requestItem = useMutation({
-    mutationFn: (item: ChecklistItemResponse) =>
-      vsoApiClient.requestInfo(caseId, {
-        reviewer_name: vsoName,
-        request_text: `Please provide: ${item.label}${item.condition_name ? ` (for ${item.condition_name})` : ""}.`,
-      }),
-    onSuccess: invalidateCase,
-    onSettled: () => setRequestingKey(null),
-  });
 
   if (caseQuery.isLoading) {
     return (
@@ -176,6 +187,11 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
+            <Avatar className="shrink-0">
+              <AvatarFallback className="bg-accent-tint font-medium text-accent">
+                {veteranInitials(`${vsoCase.veteran.first_name} ${vsoCase.veteran.last_name}`)}
+              </AvatarFallback>
+            </Avatar>
             <h1 className="text-xl font-semibold text-text-primary">
               {vsoCase.veteran.first_name} {vsoCase.veteran.last_name}
             </h1>
@@ -202,18 +218,31 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
               <Def
                 label="Contact"
                 value={
-                  <span className="flex flex-col gap-0.5">
+                  // min-w-0 on the flex column and break-all on each link is
+                  // the same fix as the layout's earlier horizontal-overflow
+                  // bug (README's flex-1/min-h-0 discipline, this time on
+                  // the inline axis): a <dl> grid cell's default min-width
+                  // is auto, so an unbroken email address was free to drag
+                  // the whole grid -- and the page -- wider than the
+                  // viewport instead of wrapping.
+                  <span className="flex min-w-0 flex-col gap-0.5">
                     {vsoCase.veteran.email && (
-                      <span className="flex items-center gap-1">
-                        <IconMail size={13} className="text-text-secondary" aria-hidden="true" />
+                      <a
+                        href={`mailto:${vsoCase.veteran.email}`}
+                        className="flex min-w-0 items-center gap-1 break-all text-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <IconMail size={13} className="shrink-0 text-text-secondary" aria-hidden="true" />
                         {vsoCase.veteran.email}
-                      </span>
+                      </a>
                     )}
                     {vsoCase.veteran.phone && (
-                      <span className="flex items-center gap-1">
-                        <IconPhone size={13} className="text-text-secondary" aria-hidden="true" />
+                      <a
+                        href={`tel:${vsoCase.veteran.phone.replace(/[^\d+]/g, "")}`}
+                        className="flex min-w-0 items-center gap-1 break-all text-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <IconPhone size={13} className="shrink-0 text-text-secondary" aria-hidden="true" />
                         {vsoCase.veteran.phone}
-                      </span>
+                      </a>
                     )}
                   </span>
                 }
@@ -246,6 +275,8 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
                             key={evidenceKey(item)}
                             variant={item.satisfied ? "success" : item.required ? "danger" : "pending"}
                             label={item.label}
+                            wrap
+                            className="max-w-full"
                           />
                         ))}
                       </div>
@@ -280,7 +311,13 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {heldEvidence.map((item) => (
-                    <StatusTag key={evidenceKey(item)} variant="success" label={item.label} />
+                    <StatusTag
+                      key={evidenceKey(item)}
+                      variant="success"
+                      label={item.label}
+                      wrap
+                      className="max-w-full"
+                    />
                   ))}
                 </div>
               )}
@@ -296,9 +333,9 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
                     return (
                       <div
                         key={key}
-                        className="flex items-center justify-between gap-2 rounded-control border border-border bg-background px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-border bg-background px-3 py-2"
                       >
-                        <span className="flex items-center gap-2 text-sm text-text-primary">
+                        <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-text-primary">
                           <StatusTag variant={item.required ? "danger" : "pending"} label={item.required ? "Required" : "Suggested"} />
                           {item.label}
                           {item.condition_name && (
@@ -309,13 +346,18 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={requestItem.isPending}
+                          className="shrink-0"
                           onClick={() => {
-                            setRequestingKey(key);
-                            requestItem.mutate(item);
+                            // Prefill + focus the conversation composer below
+                            // rather than sending immediately -- the VSO
+                            // reviews and edits the wording, then presses
+                            // "Request evidence" themselves when it's ready.
+                            const prefill = `Please provide: ${item.label}${item.condition_name ? ` (${item.condition_name})` : ""}`;
+                            conversationRef.current?.setDraft(prefill);
+                            conversationRef.current?.focus();
                           }}
                         >
-                          {requestItem.isPending && requestingKey === key ? "Requesting…" : "Request from veteran"}
+                          Request from veteran
                         </Button>
                       </div>
                     );
@@ -325,7 +367,7 @@ function VsoCaseDetail({ caseId }: { caseId: string }) {
             </div>
           </section>
 
-          <CaseConversation caseId={caseId} vsoName={vsoName} />
+          <CaseConversation ref={conversationRef} caseId={caseId} vsoName={vsoName} />
         </div>
 
         {/* Right rail -- sticky within the page's own scroll container
