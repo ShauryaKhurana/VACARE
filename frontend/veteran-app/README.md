@@ -2,9 +2,10 @@
 
 A Next.js frontend for VACARE: a conversational, mobile-first intake experience that walks a
 veteran through preparing a VA disability claim, then hands a review-ready packet to their VSO.
-This app is the veteran-facing surface described in the hackathon HLD/LLD; the Python/FastAPI
-project at the repo root (`/`) is the claim-prep backend and is not yet wired to this frontend —
-see [Mock API layer](#mock-api-layer-no-backend-yet) below.
+This app is the veteran-facing surface described in the hackathon HLD/LLD. It talks to the
+Python/FastAPI backend at the repo root when `NEXT_PUBLIC_API_BASE_URL` is set; otherwise it
+runs on mock fixtures. See [Connecting to the Python backend](#connecting-to-the-python-backend)
+and the root README **Deploy** section for the one-container image.
 
 ## Connecting to the Python backend
 
@@ -18,8 +19,9 @@ cd frontend/veteran-app && npm run dev  # the app on :3000
 ```
 
 `lib/api/client.ts` picks the implementation from `NEXT_PUBLIC_API_BASE_URL`:
-set, it uses `HttpApiClient` (`lib/api/http.ts`); unset, `MockApiClient`. No
-component knows the difference - that was the point of the interface.
+unset, `MockApiClient`; `http://127.0.0.1:8000`, the local Python port; `/`,
+same-origin (Docker/Render — Next proxies `/api` to Python). No component knows
+the difference - that was the point of the interface.
 
 The backend serves the contract in `lib/api/types.ts` from
 `src/api/app_routes.py`, mapped by `src/api/app_bridge.py`:

@@ -92,10 +92,10 @@ class MockApiClient implements ApiClient {
 }
 
 // Which implementation the app uses is decided here and nowhere else, per LLD
-// Section 6.2. Set NEXT_PUBLIC_API_BASE_URL to the Python service (e.g.
-// http://127.0.0.1:8000) to run against the real backend; leave it unset and
-// the app keeps running on mock fixtures, so the UI still works offline and
-// the tests stay hermetic.
+// Section 6.2.
+//   unset            → mock fixtures (local UI work, unit tests)
+//   http://127.0.0.1:8000 → local Python on its own port
+//   /                → same-origin (Docker / Render: Next proxies /api to Python)
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 
 export const usingMockApi = !apiBaseUrl;

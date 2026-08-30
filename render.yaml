@@ -1,0 +1,18 @@
+# Deploy to Render: paste GEMINI_API_KEY when prompted.
+# After this branch merges, change `branch` below to `main` (or delete it).
+previewsEnabled: false
+services:
+  - type: web
+    name: vacare
+    runtime: docker
+    branch: feature/one-click-deploy
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: VA_USE_MOCK
+        value: "true"
+      - key: VACARE_DB_PATH
+        value: /app/data/vacare.db

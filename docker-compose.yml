@@ -1,0 +1,18 @@
+services:
+  vacare:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "3000"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      VA_USE_MOCK: ${VA_USE_MOCK:-true}
+      VACARE_DB_PATH: /app/data/vacare.db
+    volumes:
+      - vacare-data:/app/data
+
+volumes:
+  vacare-data:

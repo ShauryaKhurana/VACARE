@@ -68,6 +68,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/health")
+def health() -> dict:
+    """Liveness for Docker / Render. The Next server proxies /api here."""
+    return {"ok": True}
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["msg_veteran"] = collaboration.message_text_for_veteran
 templates.env.filters["msg_vso"] = collaboration.message_text_for_vso
@@ -765,7 +771,9 @@ def download_526ez(claim_id: str):
 
 def main() -> None:
     import uvicorn
-    uvicorn.run("src.web:app", host="127.0.0.1", port=8000, reload=False)
+    host = os.environ.get("VACARE_HOST", "127.0.0.1")
+    port = int(os.environ.get("VACARE_API_PORT") or os.environ.get("PORT") or "8000")
+    uvicorn.run("src.web:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

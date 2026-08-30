@@ -23,6 +23,32 @@ python -m src.cli demo        # or the CLI: a filled-in sample claim and packet
 python -m src.cli intake      # guided terminal intake
 ```
 
+## Deploy (one URL, one API key)
+
+Someone else can host this without changing code. The only required secret is a
+[Gemini API key](https://aistudio.google.com/apikey). The Next.js veteran/VSO
+app and the Python API share one origin (`/` for the UI, `/api` for the backend).
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ShauryaKhurana/VACARE)
+
+1. Click **Deploy to Render**.
+2. Paste `GEMINI_API_KEY` when prompted (leave `VA_USE_MOCK=true` unless you have VA Lighthouse keys).
+3. Open the `onrender.com` URL. Veteran app is `/`. VSO dashboard is `/vso`.
+
+The button reads `render.yaml` on `feature/one-click-deploy` until this lands on
+`main` — then change `branch` in that file to `main`.
+
+Or run the same image locally:
+
+```bash
+cp .env.example .env         # paste GEMINI_API_KEY
+docker compose up --build
+```
+
+Then open <http://localhost:3000>. Document parsing needs the key; the rest of
+the app still boots without it. The Next VSO caseload at `/vso` is still mock
+data; veteran Talk on this image hits the live Python API.
+
 ## Web UI
 
 `python -m src.web` then open <http://127.0.0.1:8000>.

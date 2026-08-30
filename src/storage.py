@@ -8,6 +8,7 @@ at MVP scale (one veteran working on one claim at a time).
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from datetime import date, datetime
@@ -30,7 +31,7 @@ from src.models import (
     VSOReview,
 )
 
-DEFAULT_DB_PATH = Path("vacare.db")
+DEFAULT_DB_PATH = Path(os.environ.get("VACARE_DB_PATH", "vacare.db"))
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "va_claim_schema.sql"
 
 

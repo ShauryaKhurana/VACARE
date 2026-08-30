@@ -46,6 +46,12 @@ def submit(client, **overrides):
     return response
 
 
+def test_health_ok(client):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
 def test_every_page_renders(client):
     assert client.get("/").status_code == 200
     assert client.get("/intake").status_code == 200
