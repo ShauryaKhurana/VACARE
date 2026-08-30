@@ -47,6 +47,24 @@ const QUICK_EDIT_TARGETS = ["Service info", "Conditions", "Documents", "Statemen
 /** The exact phrase the scripted closing turn uses -- a stable marker for detecting a resumed, already-finished dig without a dedicated "done" flag on the mock API. */
 const REVIEW_HANDOFF_MARKER = "Review & confirm";
 
+/**
+ * Appends only messages the thread does not already hold.
+ *
+ * The thread merges three sources — messages restored from localStorage, the
+ * turn returned by the server, and the optimistic bubble drawn the instant
+ * the veteran hits send — so the same id can legitimately arrive twice.
+ * React then warns about duplicate keys and may drop or duplicate a bubble.
+ */
+function appendUnique(previous: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const seen = new Set(previous.map((message) => message.id));
+  const fresh = incoming.filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+  return fresh.length > 0 ? [...previous, ...fresh] : previous;
+}
+
 export function ChatThread() {
   const routingId = useSessionStore((s) => s.routingId);
   const startSession = useSessionStore((s) => s.startSession);
@@ -92,7 +110,7 @@ export function ChatThread() {
           // read once here rather than during render to avoid a hydration
           // mismatch against the server-rendered (empty) thread.
           // eslint-disable-next-line react-hooks/set-state-in-effect
-          setMessages(parsed);
+          setMessages(appendUnique([], parsed));
           setShowResumeBanner(true);
           if (parsed.length > 1) markConversationStarted();
           if (parsed.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
@@ -145,7 +163,7 @@ export function ChatThread() {
     }
     setLoading(true);
     const turn = await apiClient.sendChatMessage(routingId, veteranText ?? "");
-    setMessages((prev) => [...prev, ...turn]);
+    setMessages((prev) => appendUnique(prev, turn));
     setTurnCount((count) => {
       const next = count + 1;
       // The opening greeting (turn 1) is also all-ai-text with no card --
@@ -350,7 +368,7 @@ export function ChatThread() {
                           routingId={routingId ?? ""}
                           onUploaded={(turn) => {
                             markConversationStarted();
-                            setMessages((prev) => [...prev, ...turn]);
+                            setMessages((prev) => appendUnique(prev, turn));
                             setStepsDone((n) => Math.max(n, 1));
                           }}
                           onSkip={() => void advance()}
@@ -496,7 +514,7 @@ export function ChatThread() {
           setLoading(true);
           try {
             const turn = await apiClient.uploadDocument(routingId, file, fileName);
-            setMessages((prev) => [...prev, ...turn]);
+            setMessages((prev) => appendUnique(prev, turn));
           } catch (error) {
             setMessages((prev) => [
               ...prev,
