@@ -82,6 +82,45 @@ function appendUnique(previous: ChatMessage[], incoming: ChatMessage[]): ChatMes
   return [...kept, ...fresh];
 }
 
+/**
+ * Works out how far the dig got from the thread itself.
+ *
+ * Progress lived only in React state, so every reload reset it to zero: the
+ * rail snapped back to "Service info" and "Start over" greyed out again even
+ * though the veteran had already confirmed their DD-214. The conversation is
+ * the durable record, so the step count is read back from it.
+ */
+function deriveStepsDone(messages: ChatMessage[]): number {
+  let steps = 0;
+  for (const message of messages) {
+    if (message.type === "confirmation-card") steps = Math.max(steps, 1);
+    if (message.type === "eligibility-card") steps = Math.max(steps, 2);
+    if (message.type === "statement-builder") steps = Math.max(steps, 3);
+    if (message.type === "ai-text" && message.text.includes(REVIEW_HANDOFF_MARKER)) {
+      steps = Math.max(steps, 3);
+    }
+  }
+  return steps;
+}
+
+/**
+ * Keeps only the most recent of each transient affordance.
+ *
+ * A thread persisted by an earlier build can already contain a stack of
+ * identical upload cards; restoring it verbatim puts them straight back on
+ * screen.
+ */
+function pruneStaleAffordances(messages: ChatMessage[]): ChatMessage[] {
+  const lastOfType = new Map<string, string>();
+  for (const message of messages) {
+    if (TRANSIENT_TYPES.has(message.type)) lastOfType.set(message.type, message.id);
+  }
+  return messages.filter(
+    (message) =>
+      !TRANSIENT_TYPES.has(message.type) || lastOfType.get(message.type) === message.id,
+  );
+}
+
 export function ChatThread() {
   const routingId = useSessionStore((s) => s.routingId);
   const startSession = useSessionStore((s) => s.startSession);
@@ -127,11 +166,14 @@ export function ChatThread() {
           // read once here rather than during render to avoid a hydration
           // mismatch against the server-rendered (empty) thread.
           // eslint-disable-next-line react-hooks/set-state-in-effect
-          setMessages(appendUnique([], parsed));
+          const restored = pruneStaleAffordances(appendUnique([], parsed));
+          setMessages(restored);
           setShowResumeBanner(true);
-          if (parsed.length > 1) markConversationStarted();
-          if (parsed.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
-            setStepsDone(3);
+          if (restored.length > 1) markConversationStarted();
+          // Progress has to come back with the conversation, or the rail and
+          // "Start over" both reset on every reload.
+          setStepsDone(deriveStepsDone(restored));
+          if (restored.some((m) => m.type === "ai-text" && m.text.includes(REVIEW_HANDOFF_MARKER))) {
             setDigComplete(true);
           }
           return;
@@ -264,7 +306,7 @@ export function ChatThread() {
   // Nothing to discard yet if the veteran hasn't moved past Service info --
   // a claim that was already submitted is always a real thing to start over
   // from, regardless of this dig's own step count.
-  const canStartOver = claimSubmitted || stepsDone > 0;
+  const canStartOver = claimSubmitted || stepsDone > 0 || messages.length > 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -319,7 +361,7 @@ export function ChatThread() {
               setRestartTarget(null);
               setRestartDialogOpen(true);
             }}
-            aria-label={canStartOver ? undefined : "Start over -- available once you've moved past Service info"}
+            aria-label={canStartOver ? undefined : "Start over -- available once you've said something"}
             className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
           >
             Start over
