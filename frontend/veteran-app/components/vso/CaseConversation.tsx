@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconArrowDown, IconClipboardList, IconMessageCircle2, IconSend } from "@tabler/icons-react";
 import { AccentButton } from "@/components/shared/AccentButton";
+import { StatusTag } from "@/components/shared/StatusTag";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { isUploadNotice, messageTextForVso } from "@/lib/api/vso/messages";
@@ -77,9 +78,9 @@ function MessageRow({ message }: { message: CaseMessageResponse }) {
  * The three-party thread (veteran, AI orchestrator's system notices, VSO)
  * for one case. Deliberately not a reuse of components/chat/ChatThread.tsx
  * (501 lines, hard-coded intake steps, its own localStorage persistence) --
- * only its *patterns* carry over: a bounded scroll region with a bottomRef
- * autoscroll, a jump-to-latest affordance once scrolled away, and a
- * lightweight "sending" indicator while a message is in flight.
+ * only its *patterns* carry over: a bounded scroll region with an
+ * autoscroll-to-latest, a jump-to-latest affordance once scrolled away, and
+ * a lightweight "sending" indicator while a message is in flight.
  *
  * Scroll containment: this component owns a fixed-height box rather than
  * trying to flex-fill the page's own scroll container (VsoPageContainer) --
@@ -99,7 +100,6 @@ export const CaseConversation = forwardRef<CaseConversationHandle, { caseId: str
     const [text, setText] = useState("");
     const [showJumpToLatest, setShowJumpToLatest] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
-    const bottomRef = useRef<HTMLDivElement>(null);
     const composerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -140,8 +140,18 @@ export const CaseConversation = forwardRef<CaseConversationHandle, { caseId: str
 
     const sending = sendNote.isPending || requestEvidence.isPending;
 
+    // Scrolls only this component's own message list (scrollAreaRef), not
+    // bottomRef.scrollIntoView(), which walks every scrollable ancestor to
+    // bring its target into view -- including VsoPageContainer's page-level
+    // scroll region. On the case detail page (this conversation renders
+    // partway down a long single-column page) that bubbled all the way up
+    // and yanked the whole page ~500px down to the conversation on every
+    // load, away from the veteran summary/review findings the page opens
+    // to. Setting scrollTop directly stays scoped to this box.
     useEffect(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      const el = scrollAreaRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }, [messages, sending]);
 
     useEffect(() => {
@@ -182,13 +192,15 @@ export const CaseConversation = forwardRef<CaseConversationHandle, { caseId: str
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-secondary" />
               </div>
             )}
-            <div ref={bottomRef} />
           </div>
 
           {showJumpToLatest && (
             <button
               type="button"
-              onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+              onClick={() => {
+                const el = scrollAreaRef.current;
+                el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              }}
               aria-label="Jump to latest message"
               className="absolute bottom-2 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
@@ -210,6 +222,19 @@ export const CaseConversation = forwardRef<CaseConversationHandle, { caseId: str
             rows={2}
             className="resize-none text-sm"
           />
+          {/* Neither mutation had any isError handling before this -- a
+              rejected sendNote/requestEvidence just silently vanished (the
+              "sending" bounce dots disappear once isPending flips false, and
+              nothing else told the VSO it didn't go through). Matches
+              ApprovalGate's and the bulk composer's own error banner
+              treatment (StatusTag danger + a plain-language line), so every
+              VSO mutation surface reads the same way on failure. */}
+          {(sendNote.isError || requestEvidence.isError) && (
+            <div className="flex items-center gap-2" role="alert">
+              <StatusTag variant="danger" label="Send failed" />
+              <span className="text-xs text-text-secondary">Something went wrong -- try again.</span>
+            </div>
+          )}
           {/* Two visibly distinct actions on purpose -- "Send note" is a
               plain thread message (POST /messages), "Request evidence" also
               files a formal follow-up task and flips the case to

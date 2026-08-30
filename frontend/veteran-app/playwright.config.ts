@@ -2,6 +2,14 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // upload/consoleErrors/startOver/affordances/draftForm/firstPrompt need a
+  // real backend on :8000 to prove anything (playwright.live.config.ts's
+  // own testMatch scopes them there) -- against this config's isolated
+  // mock-mode server on :3100 they can only ever time out waiting for real
+  // HTTP responses that never arrive. Without this exclusion `npm run
+  // test:e2e` always reported ~28 failures unrelated to whatever was
+  // actually being changed.
+  testIgnore: /(upload|consoleErrors|startOver|affordances|draftForm|firstPrompt)\.spec\.ts/,
   fullyParallel: true,
   reporter: "list",
   use: {

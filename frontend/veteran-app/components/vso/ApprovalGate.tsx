@@ -31,7 +31,14 @@ function CheckRow({ check }: { check: FilingCheckItem }) {
         disabled={!canExpand}
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left disabled:cursor-default"
       >
-        <span className="flex items-center gap-2 text-sm text-text-primary">
+        {/* min-w-0: this span has no shrink limit of its own by default
+            (flex's min-width:auto), so at a narrow width combined with the
+            accessibility text-scale control turned up, a longer check
+            label ("VSO representation (21-22)") refused to shrink and
+            pushed the expand chevron a few pixels past the viewport edge --
+            min-w-0 lets it wrap/shrink instead, keeping the chevron fully
+            on-screen and clickable. */}
+        <span className="flex min-w-0 items-center gap-2 text-sm text-text-primary">
           <StatusTag variant={check.ok ? "success" : check.optional ? "pending" : "danger"} label={check.ok ? "OK" : check.optional ? "Optional" : "Blocked"} />
           {check.label}
         </span>

@@ -163,22 +163,33 @@ function CategoryRow({
           onClick={onNavigate}
           aria-current={isActive ? "page" : undefined}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2.5 rounded-control px-2.5 py-2 text-base text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            // flex-col, not a single row: tried keeping icon/label/badge on
+            // one flex-wrap row first, but CSS flex-wrap decides wrapping
+            // per-item based on width, not based on a sibling growing
+            // *taller* -- once the label wrapped to 2 lines (at the
+            // accessibility text-scale control's 175% max, "Deadlines
+            // approaching" doesn't fit one line in a 300px drawer), the
+            // badge still placed itself on the row's first line and visibly
+            // overlapped the label's own first line instead of dropping
+            // below the whole label block. A real block-level stack (badge
+            // always on its own line under icon+label) has no such
+            // width-vs-height ambiguity to get wrong, at any scale.
+            // Verified via screenshot at 175%, not just a scrollWidth check
+            // -- overlapping/mis-wrapped text paints past its box without
+            // widening the document, so only a screenshot catches this.
+            "flex min-w-0 flex-1 flex-col gap-1 rounded-control px-2.5 py-2 text-base text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
             isActive
               ? "bg-accent-tint font-medium text-accent"
               : "hover:bg-background hover:text-text-primary",
           )}
         >
-          <Icon size={19} stroke={isActive ? 2.25 : 1.75} className="shrink-0" aria-hidden="true" />
-          {/* Wraps rather than truncating with an ellipsis -- a fixed rail
-              width can never reliably fit every label at every zoom level,
-              and the app's own text-scale accessibility control goes up to
-              175%, so "make it wide enough" can't be a permanent fix the
-              way "let it wrap" is. */}
-          <span className="min-w-0 flex-1">{category.label}</span>
+          <span className="flex min-w-0 items-center gap-2.5">
+            <Icon size={19} stroke={isActive ? 2.25 : 1.75} className="shrink-0" aria-hidden="true" />
+            <span className="min-w-0 break-words">{category.label}</span>
+          </span>
           <span
             className={cn(
-              "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
+              "ml-[29px] w-fit shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
               isActive ? "bg-accent text-white" : "bg-background text-text-secondary",
             )}
           >
@@ -191,7 +202,13 @@ function CategoryRow({
             onClick={() => onToggleExpand(category.id)}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? `Collapse ${category.label}` : `Expand ${category.label}`}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-text-secondary hover:bg-background hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            // Fixed pixel size (not h-8/w-8's rem units) -- a toggle
+            // button's tap target doesn't need to grow with the
+            // accessibility text-scale control the way reading text does,
+            // and at the control's 175% max it was ballooning to ~56px and
+            // starving the category label of the width it needs to wrap
+            // normally instead of breaking mid-word.
+            className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-control text-text-secondary hover:bg-background hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {isExpanded ? (
               <IconChevronDown size={15} aria-hidden="true" />
@@ -215,12 +232,18 @@ function CategoryRow({
                   onClick={onNavigate}
                   aria-current={subActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center justify-between gap-2 rounded-control px-2 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    // Same stack-not-squeeze reasoning as the parent
+                    // category row above -- a side-by-side label+count row
+                    // has no safe way to keep them from overlapping once
+                    // text-scale makes the label taller than one line.
+                    "flex min-w-0 flex-col gap-0.5 rounded-control px-2 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     subActive ? "font-medium text-accent" : "text-text-secondary hover:text-text-primary",
                   )}
                 >
-                  <span className="min-w-0">{subItem.label}</span>
-                  <span className="text-xs text-text-secondary">{viewCounts[subItem.id] ?? 0}</span>
+                  <span className="min-w-0 break-words">{subItem.label}</span>
+                  <span className="w-fit shrink-0 text-xs text-text-secondary">
+                    {viewCounts[subItem.id] ?? 0}
+                  </span>
                 </Link>
               </li>
             );
