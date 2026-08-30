@@ -1,0 +1,20 @@
+{# POA help — import button inline, modal once per page. #}
+{% macro button(modal_id='poa-help-modal') %}
+<button type="button" class="help-icon-btn" aria-label="What is this?" data-help-open="{{ modal_id }}">?</button>
+{% endmacro %}
+
+{% macro modal(modal_id='poa-help-modal') %}
+<div class="help-modal" id="{{ modal_id }}" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}-title" hidden>
+  <div class="help-modal-backdrop" data-help-close tabindex="-1"></div>
+  <div class="help-modal-panel">
+    <button type="button" class="help-modal-close" data-help-close aria-label="Close">&times;</button>
+    <h3 class="help-modal-title" id="{{ modal_id }}-title">{{ poa_title }}</h3>
+    <p class="help-modal-body">{{ poa_explainer }}</p>
+    {% if poa_form_url %}
+    <p class="help-modal-foot muted">
+      <a href="{{ poa_form_url }}" target="_blank" rel="noopener">Get {{ poa_form_label }} on VA.gov ↗</a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}

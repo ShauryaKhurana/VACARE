@@ -1,9 +1,12 @@
 """End-to-end checks on the web frontend."""
 
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
 from src import web
+from src.gemini import GeminiError
 from src.sample_data import build_sample_claim
 from src.storage import ClaimStore
 
@@ -18,9 +21,21 @@ BASE_INTAKE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def clear_chat_sessions():
+    web.CHAT_SESSIONS.clear()
+    yield
+    web.CHAT_SESSIONS.clear()
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "DB_PATH", tmp_path / "web.db")
+    monkeypatch.setattr(
+        "src.va.client._env",
+        lambda name, default="": "true" if name == "VA_USE_MOCK" else default,
+    )
+    monkeypatch.setattr("src.document_ingest.UPLOAD_ROOT", tmp_path / "uploads")
     return TestClient(web.app)
 
 
@@ -37,6 +52,10 @@ def test_every_page_renders(client):
     assert client.get("/forms").status_code == 200
 
 
+def claim_details(client, claim_path: str):
+    return client.get(f"{claim_path}/details")
+
+
 def test_intake_creates_a_claim_and_lands_on_its_dashboard(client):
     response = submit(client)
     assert response.status_code == 303
@@ -45,8 +64,8 @@ def test_intake_creates_a_claim_and_lands_on_its_dashboard(client):
     page = client.get(location)
     assert page.status_code == 200
     assert "Dana Reyes" in page.text
-    assert "21-526EZ" in page.text          # the lane's master form
-    assert "21-0966" in page.text           # ITF leads a first claim
+    assert "21-526EZ" in page.text
+    assert "21-0966" in claim_details(client, location).text
 
 
 def test_intake_rejects_a_bad_date_of_birth_without_creating_a_claim(client):
@@ -68,7 +87,7 @@ def test_mental_health_condition_changes_the_form_sequence(client):
         condition_1_name="PTSD",
         condition_1_symptoms="Nightmares and hypervigilance most days.",
     ).headers["location"]
-    assert "21-0781" in client.get(location).text
+    assert "21-0781" in claim_details(client, location).text
 
 
 def test_decision_review_answers_route_to_the_right_door(client):
@@ -78,24 +97,24 @@ def test_decision_review_answers_route_to_the_right_door(client):
         disagrees_with_decision="on", decision_date="2026-06-01",
         has_new_evidence="on",
     ).headers["location"]
-    page = client.get(location).text
+    page = claim_details(client, location).text
     assert "20-0995" in page                     # supplemental, because new evidence exists
     assert "Higher-Level Review deadline" in page  # the clock is shown either way
 
 
 def test_deadline_clock_appears_when_an_itf_date_is_given(client):
     location = submit(client, itf_filed_on="2026-06-01").headers["location"]
-    assert "Intent to File expires" in client.get(location).text
+    assert "Intent to File expires" in claim_details(client, location).text
 
 
 def test_adding_evidence_updates_the_checklist(client):
     location = submit(client).headers["location"]
-    before = client.get(location).text
+    before = claim_details(client, location).text
     assert "Service treatment records" in before
 
     client.post(f"{location}/evidence", data={"evidence_type": "service_treatment_record"},
                 follow_redirects=False)
-    after = client.get(location).text
+    after = claim_details(client, location).text
     assert after.count("Service treatment records") < before.count("Service treatment records")
 
 
@@ -103,7 +122,7 @@ def test_status_can_be_recorded_from_the_dashboard(client):
     location = submit(client).headers["location"]
     client.post(f"{location}/status", data={"status": "in_vso_review", "note": "Picked up"},
                 follow_redirects=False)
-    page = client.get(location).text
+    page = claim_details(client, location).text
     assert "in vso review" in page and "Picked up" in page
 
 
@@ -126,102 +145,146 @@ def test_home_lists_a_saved_claim(client):
     assert claim.id in client.get("/").text
 
 
-# --- the chat UI's JSON API ------------------------------------------------
-
-STORY_PAYLOAD = {
-    "conditions": [{"name": "Tinnitus", "current_symptoms": "Ears ring constantly",
-                    "onset_date": "2011-04-01", "started_in_service": True,
-                    "worsened_in_service": False, "currently_treated": True}],
-    "event": {"title": "Convoy IED blast", "description": "Struck a roadside device.",
-              "event_date": "2011-04-09"},
-    "has_dependents": True,
-}
-
-DD214_PAYLOAD = {
-    "document_type": "dd214", "confidence": "high", "summary": "DD-214",
-    "first_name": "DANA", "last_name": "REYES", "date_of_birth": "1988-03-12",
-    "branch": "army", "service_start": "2007-06-01", "service_end": "2013-08-30",
-    "discharge_type": "honorable",
-}
+def test_gemini_status_missing_key(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.api_key", lambda: None)
+    response = client.get("/api/gemini/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "missing"
 
 
-@pytest.fixture
-def mocked_ai():
-    from unittest.mock import patch
-    from src import extract, gemini
-    with patch.object(gemini, "available", return_value=True), \
-         patch.object(extract, "extract_from_story", return_value=STORY_PAYLOAD), \
-         patch.object(extract, "extract_from_document", return_value=DD214_PAYLOAD):
-        yield
+def test_gemini_status_ok(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.api_key", lambda: "test-key")
+    monkeypatch.setattr("src.gemini.generate_text", lambda *args, **kwargs: "OK")
+    response = client.get("/api/gemini/status")
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "ok"
 
 
-def test_chat_page_renders_the_shell(client):
-    page = client.get("/chat")
-    assert page.status_code == 200
-    assert "/api/chat" in page.text
+def test_gemini_status_daily_exhausted(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        "src.gemini.generate_text",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            GeminiError(
+                'Gemini returned HTTP 429: {"error":{"message":"quota exceeded per day FreeTier limit: 20"}}'
+            )
+        ),
+    )
+    response = client.get("/api/gemini/status")
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "daily_exhausted"
 
 
-def test_api_returns_the_opening_question(client):
-    state = client.get("/api/chat").json()
-    assert state["question"]["slot"] == "story"
-    assert state["question"]["multiline"] is True
-    assert state["facts"]["has_any"] is False
+def _chat_session(client):
+    response = client.get("/chat")
+    session_id = response.cookies.get("vacare_chat")
+    return web.CHAT_SESSIONS[session_id]
 
 
-def test_api_message_extracts_facts_into_the_panel(client, mocked_ai):
-    client.get("/api/chat")
-    state = client.post("/api/chat/message", json={"message": "IED blast, ears ring"}).json()
+def test_rating_quick_pick_none_advances_chat(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.available", lambda: False)
+    session = _chat_session(client)
+    session.story_done = True
+    session.identity_done = True
+    session.claim.veteran.first_name = "Dana"
+    session.claim.veteran.last_name = "Reyes"
+    session.claim.veteran.dob = date(1988, 3, 12)
+    session.claim.veteran.service_start = date(2007, 6, 1)
+    session.claim.veteran.service_end = date(2013, 8, 30)
+    session.contact_done = True
+    session.claim.veteran.phone = "555-014-2277"
+    session.transcript.clear()
+    session.say("bot", "Does the VA pay you for any disability right now?")
 
-    assert [c["name"] for c in state["facts"]["conditions"]] == ["Tinnitus"]
-    assert state["facts"]["conditions"][0]["link"] == "began in service"
-    assert state["facts"]["lane"] == "I've never filed"
-    assert state["question"]["slot"] == "identity"
-
-
-def test_api_upload_fills_identity_and_advances(client, mocked_ai):
-    client.get("/api/chat")
-    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
-    state = client.post(
-        "/api/chat/upload", files={"document": ("dd214.txt", b"DD214", "text/plain")}
-    ).json()
-
-    assert state["facts"]["name"] == "Dana Reyes"
-    assert state["facts"]["dob"] == "1988-03-12"
-    assert state["facts"]["service"] == "2007-06-01 to 2013-08-30"
-    assert "dd214" in state["facts"]["documents"]
-    assert state["question"]["slot"] == "rating"
-
-
-def test_missing_items_are_scoped_to_a_condition(client, mocked_ai):
-    client.get("/api/chat")
-    state = client.post("/api/chat/message", json={"message": "IED blast"}).json()
-    scoped = [m for m in state["facts"]["missing"] if m["scope"]]
-    assert scoped and scoped[0]["scope"] == "Tinnitus"
+    response = client.post(
+        "/chat",
+        data={"quick_pick": "No, this is my first claim", "message": ""},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert session.rating_done is True
+    assert session.claim.context.has_existing_rating is False
+    assert "first claim" in response.text
 
 
-def test_finish_saves_the_claim_and_returns_its_url(client, mocked_ai):
-    client.get("/api/chat")
-    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
-    result = client.post("/api/chat/finish").json()
+def test_rating_quick_pick_percent_multipart(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.available", lambda: False)
+    session = _chat_session(client)
+    session.story_done = True
+    session.identity_done = True
+    session.claim.veteran.first_name = "Dana"
+    session.claim.veteran.last_name = "Reyes"
+    session.claim.veteran.dob = date(1988, 3, 12)
+    session.claim.veteran.service_start = date(2007, 6, 1)
+    session.claim.veteran.service_end = date(2013, 8, 30)
+    session.contact_done = True
+    session.claim.veteran.email = "dana@example.com"
+    session.transcript.clear()
+    session.say("bot", "Does the VA pay you for any disability right now?")
 
-    assert result["url"].startswith("/claim/")
-    with ClaimStore(web.DB_PATH) as store:
-        assert store.load_claim(result["claim_id"]) is not None
-    assert client.get(result["url"]).status_code == 200
+    response = client.post(
+        "/chat",
+        data={"quick_pick": "30%", "message": ""},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert session.rating_done is True
+    assert session.claim.context.combined_rating == 30
+    assert "30%" in response.text
 
 
-def test_reset_clears_the_conversation(client, mocked_ai):
-    client.get("/api/chat")
-    client.post("/api/chat/message", json={"message": "IED blast, ears ring"})
-    client.post("/api/chat/reset")
+def test_chat_quick_pick_buttons_are_not_submit(client):
+    page = client.get("/chat").text
+    assert "chat-quick-pick" in page
+    assert "chat-suggestion" in page
+    assert 'type="button"' in page
+
+
+def test_pages_include_test_api_key_button(client):
+    assert "vacare-test-key" in client.get("/chat").text
+
+
+def test_chat_has_home_button(client):
+    page = client.get("/chat").text
+    assert 'class="chat-home-btn"' in page
+    assert 'href="/"' in page
+    assert "aria-label=\"Home\"" in page
+
+
+def test_chat_persists_across_memory_clear(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.available", lambda: False)
+    first = client.get("/chat")
+    claim_id = first.cookies.get("vacare_chat")
+    client.post("/chat", data={"message": "My back hurts from service", "quick_pick": ""})
+
+    web.CHAT_SESSIONS.clear()
+    resumed = client.get("/chat")
+    assert resumed.status_code == 200
+    assert "My back hurts from service" in resumed.text
+    assert resumed.cookies.get("vacare_chat") == claim_id
+
+
+def test_claim_chat_resume_sets_cookie(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.available", lambda: False)
+    started = client.get("/chat")
+    claim_id = started.cookies.get("vacare_chat")
     client.cookies.clear()
-    assert client.get("/api/chat").json()["facts"]["has_any"] is False
+    response = client.get(f"/claim/{claim_id}/chat", follow_redirects=False)
+    assert response.status_code == 303
+    follow = client.get("/chat")
+    assert follow.cookies.get("vacare_chat") == claim_id
 
 
-def test_an_oversized_upload_is_refused_politely(client, mocked_ai):
-    from src import gemini
-    client.get("/api/chat")
-    big = b"x" * (gemini.MAX_INLINE_BYTES + 1)
-    state = client.post("/api/chat/upload",
-                        files={"document": ("huge.pdf", big, "application/pdf")}).json()
-    assert any("too large" in m["text"] for m in state["messages"])
+def test_chat_new_starts_fresh_claim(client, monkeypatch):
+    monkeypatch.setattr("src.gemini.available", lambda: False)
+    first = client.get("/chat")
+    first_id = first.cookies.get("vacare_chat")
+    response = client.get("/chat/new", follow_redirects=False)
+    assert response.status_code == 303
+    second = client.get("/chat")
+    second_id = second.cookies.get("vacare_chat")
+    assert second_id != first_id

@@ -18,6 +18,8 @@ import base64
 import json
 import mimetypes
 import os
+import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -38,6 +40,95 @@ MAX_INLINE_BYTES = 18 * 1024 * 1024   # inline_data ceiling, with headroom
 
 class GeminiError(RuntimeError):
     """The API refused or the response could not be parsed."""
+
+
+def user_facing_error(error: Exception) -> str:
+    """Plain-language message for veterans — never expose raw API JSON."""
+    text = str(error)
+    lowered = text.lower()
+    retry_match = re.search(r"retry in (\d+(?:\.\d+)?)\s*s", text, re.I)
+    retry_hint = ""
+    if retry_match:
+        seconds = min(int(float(retry_match.group(1))) + 1, 120)
+        retry_hint = f" Wait about {seconds} seconds, then try again."
+
+    if "429" in text or "quota" in lowered or "resource_exhausted" in lowered:
+        if "per day" in lowered or "freetier" in lowered or "limit: 20" in lowered:
+            return (
+                "The daily AI request limit on this API key is used up for now."
+                " Try again tomorrow, or use a fresh key in .env."
+                " Your file is saved — you don't need to re-upload it."
+            )
+        return (
+            "Too many requests in a row."
+            + (retry_hint or " Wait about a minute and try again.")
+            + " Your file is saved."
+        )
+    if "503" in text or "unavailable" in lowered:
+        return "The AI service is busy right now. Please wait a moment and try again."
+    if "401" in text or "403" in text or "api key" in lowered:
+        return (
+            "The document reader isn't configured correctly. "
+            "Check GEMINI_API_KEY in .env and restart the server."
+        )
+    if "no gemini_api_key" in lowered:
+        return "No API key configured — I saved your upload but can't read documents yet."
+    return "I couldn't read that just now. Please try again in a moment."
+
+
+def classify_api_error(error_text: str) -> tuple[str, str]:
+    """Map a Gemini HTTP error to (status_code, short_message) for dev checks."""
+    lowered = error_text.lower()
+    if "no gemini_api_key" in lowered:
+        return "missing", "No GEMINI_API_KEY in .env — document reading is off."
+    if "per day" in lowered or "freetier" in lowered or "free_tier" in lowered or "limit: 20" in lowered:
+        model_match = re.search(r"model: ([^\n\\]+)", error_text)
+        model_hint = f" ({model_match.group(1).strip()})" if model_match else ""
+        return (
+            "daily_exhausted",
+            "Daily free-tier quota used up"
+            + model_hint
+            + ". Try GEMINI_MODEL=gemini-2.5-flash in .env, wait until tomorrow, "
+            "or enable billing in Google AI Studio (Projects → your project → tier).",
+        )
+    if "429" in error_text or "quota" in lowered or "resource_exhausted" in lowered:
+        retry_match = re.search(r"retry in (\d+(?:\.\d+)?)\s*s", error_text, re.I)
+        if retry_match:
+            seconds = min(int(float(retry_match.group(1))) + 1, 120)
+            return "rate_limited", f"Rate limited — wait ~{seconds}s, then try again."
+        return "rate_limited", "Rate limited — wait about a minute, then try again."
+    if "503" in error_text or "unavailable" in lowered:
+        return "busy", "AI service is busy right now. Try again in a moment."
+    if "401" in error_text or "403" in error_text or "api key not valid" in lowered:
+        return "invalid", "Key rejected — check GEMINI_API_KEY in .env and restart the server."
+    return "error", user_facing_error(GeminiError(error_text))
+
+
+def check_api_key(timeout: int = 20) -> Dict[str, Any]:
+    """Probe the configured key with one tiny request (uses ~1 daily quota slot)."""
+    model = model_name()
+    if not api_key():
+        status, message = classify_api_error("No GEMINI_API_KEY found")
+        return {"configured": False, "ok": False, "status": status, "model": model, "message": message}
+
+    try:
+        generate_text("Reply with exactly the word OK.", timeout=timeout)
+        return {
+            "configured": True,
+            "ok": True,
+            "status": "ok",
+            "model": model,
+            "message": f"API key works ({model}). Document reading is available.",
+        }
+    except GeminiError as error:
+        status, message = classify_api_error(str(error))
+        return {
+            "configured": True,
+            "ok": False,
+            "status": status,
+            "model": model,
+            "message": message,
+        }
 
 
 def load_env(path: Path = ENV_PATH) -> Dict[str, str]:
@@ -103,14 +194,27 @@ def _post(model: str, body: Dict[str, Any], timeout: int) -> Dict[str, Any]:
         data=json.dumps(body).encode(),
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode()[:500]
-        raise GeminiError(f"Gemini returned HTTP {error.code}: {detail}") from error
-    except urllib.error.URLError as error:
-        raise GeminiError(f"Could not reach Gemini: {error.reason}") from error
+    last_error: Optional[Exception] = None
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode()[:500]
+            last_error = GeminiError(f"Gemini returned HTTP {error.code}: {detail}")
+            quota_hit = error.code == 429 and (
+                "quota" in detail.lower() or "RESOURCE_EXHAUSTED" in detail
+            )
+            if quota_hit:
+                raise last_error from error
+            if error.code in {429, 503} and attempt == 0:
+                time.sleep(2)
+                continue
+            raise last_error from error
+        except urllib.error.URLError as error:
+            raise GeminiError(f"Could not reach Gemini: {error.reason}") from error
+    assert last_error is not None
+    raise last_error
 
 
 def _first_text(payload: Dict[str, Any]) -> str:

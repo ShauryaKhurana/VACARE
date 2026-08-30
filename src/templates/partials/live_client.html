@@ -1,0 +1,376 @@
+{# Shared live polling — patches DOM sections only, no full page reload. #}
+<style>
+  .vacare-live-notice {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 14px; margin-bottom:12px; font-size:14px; font-weight:600;
+    background:#e8eefb; border-left:4px solid #1d4fc4; border-radius:0 6px 6px 0;
+    animation:vacare-notice-in .25s ease;
+  }
+  .vacare-live-notice[hidden] { display:none !important; }
+  .vacare-live-notice button {
+    flex-shrink:0; font-size:12px; padding:4px 10px; border:1px solid #1d4fc4;
+    background:#fff; color:#1d4fc4; border-radius:4px; cursor:pointer; font-weight:600;
+  }
+  .vacare-msg { margin-bottom:10px; font-size:14px; }
+  .vacare-msg-meta {
+    font-family:"Courier Prime",monospace; font-size:11px; color:#62666d;
+  }
+  .vacare-live-badge {
+    display:inline-block; font-size:11px; font-weight:700; padding:2px 8px;
+    border-radius:999px; background:#e8eefb; color:#1d4fc4; margin-left:8px;
+  }
+  .vacare-live-badge[hidden] { display:none !important; }
+  @keyframes vacare-notice-in {
+    from { opacity:0; transform:translateY(-4px); }
+    to { opacity:1; transform:none; }
+  }
+</style>
+<script>
+(function () {
+  var POLL_MS = 2500;
+
+  function seenKey(claimId) {
+    return "vacare_seen_" + claimId;
+  }
+
+  function escapeHtml(text) {
+    var el = document.createElement("div");
+    el.textContent = text || "";
+    return el.innerHTML;
+  }
+
+  function showNotice(noticeEl, text) {
+    if (!noticeEl) return;
+    var label = noticeEl.querySelector(".vacare-live-notice-text");
+    if (label) label.textContent = text;
+    noticeEl.hidden = false;
+  }
+
+  function hideNotice(noticeEl) {
+    if (noticeEl) noticeEl.hidden = true;
+  }
+
+  function isUploadNotice(msg) {
+    if (!msg || msg.author !== "system") return false;
+    var body = (msg.body || "").toLowerCase();
+    if ((msg.body || "").indexOf("upload:") === 0) return true;
+    return body === "user uploaded a document." || body === "veteran uploaded a document.";
+  }
+
+  function formatTimestamp(raw) {
+    if (!raw) return "";
+    return String(raw).replace("T", " ").slice(0, 16);
+  }
+
+  function formatMessageBody(msg, role) {
+    if (!msg) return "";
+    if (isUploadNotice(msg)) {
+      var name = msg.body.slice("upload:".length);
+      if (role === "vso") {
+        return "Veteran uploaded a document.";
+      }
+      if (name && name !== "document") {
+        return "You sent a document: " + name;
+      }
+      return "You sent a document.";
+    }
+    return msg.body || "";
+  }
+
+  function isVeteranActivity(msg) {
+    if (!msg) return false;
+    if (msg.author === "veteran") return true;
+    return isUploadNotice(msg);
+  }
+
+  function veteranActivityNotice(msg) {
+    if (!msg) return "New update from the veteran";
+    if (isUploadNotice(msg)) return "Veteran uploaded a document";
+    return "New reply from the veteran";
+  }
+
+  function renderVeteranMessages(container, messages) {
+    container.innerHTML = messages.map(function (m) {
+      var meta = m.author.toUpperCase() + (m.created_at ? " · " + formatTimestamp(m.created_at) : "");
+      var body = escapeHtml(formatMessageBody(m, "veteran"));
+      if (m.author === "system") {
+        var uploadCls = isUploadNotice(m) ? " vacare-msg-system thread-upload" : " vacare-msg-system";
+        return '<div class="vacare-msg' + uploadCls + '" data-id="' + m.id + '">' +
+          '<span class="vacare-msg-meta">' + meta + '</span><br>' +
+          '<em>' + body + '</em></div>';
+      }
+      return '<div class="vacare-msg" data-id="' + m.id + '">' +
+        '<span class="vacare-msg-meta">' + meta + '</span><br>' +
+        body + "</div>";
+    }).join("");
+  }
+
+  function renderChatMessages(container, messages) {
+    container.innerHTML = messages.map(function (m) {
+      var body = escapeHtml(formatMessageBody(m, "veteran"));
+      if (m.author === "system") {
+        return '<div class="chat-vso-msg system"><em>' + body + "</em></div>";
+      }
+      return '<div class="chat-vso-msg ' + m.author + '">' + body + "</div>";
+    }).join("");
+  }
+
+  function renderVsoThread(container, messages) {
+    container.innerHTML = messages.map(function (m) {
+      var body = escapeHtml(formatMessageBody(m, "vso"));
+      var inner = m.author === "system" ? "<em>" + body + "</em>" : body;
+      var uploadCls = isUploadNotice(m) ? " thread-upload" : "";
+      return '<div class="thread-row ' + m.author + uploadCls + '">' +
+        '<div class="thread-meta">' + m.author.toUpperCase() + " · " + formatTimestamp(m.created_at) + "</div>" +
+        '<div class="thread-body">' + inner + "</div></div>";
+    }).join("");
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function applyNextSteps(data) {
+    var box = document.getElementById("vacare-next-steps");
+    if (!box) return;
+    if (data.vso_approved) {
+      box.innerHTML =
+        '<div class="banner" style="border-left-color:#1e6f45">' +
+        "<b>Your VSO approved this packet.</b> You can download the form and test-submit to the VA sandbox.</div>";
+    } else if (data.in_vso_queue) {
+      box.innerHTML =
+        '<div class="banner" style="border-left-color:#1e6f45">' +
+        "<b>With your VSO for review.</b> They may message you here with questions.</div>";
+    }
+    var vaBtn = document.getElementById("vacare-va-submit");
+    if (vaBtn) vaBtn.disabled = !data.vso_approved;
+    var chatNote = document.getElementById("vacare-chat-status-note");
+    if (chatNote) {
+      if (data.vso_approved) {
+        chatNote.textContent = "VSO approved your packet. You can test-submit to VA.";
+      } else if (data.in_vso_queue) {
+        chatNote.textContent = "Waiting for VSO review. New messages appear here automatically.";
+      }
+    }
+    var chatVa = document.getElementById("vacare-chat-va-form");
+    if (chatVa) chatVa.hidden = !data.vso_approved;
+  }
+
+  function renderDocuments(container, evidence) {
+    if (!container) return;
+    if (!evidence || !evidence.length) {
+      container.innerHTML = '<p class="muted" style="font-size:14px">No documents uploaded yet.</p>';
+      return;
+    }
+    container.innerHTML = "<p>" + evidence.map(function (e) {
+      return '<span class="badge b-doc" style="margin-right:6px">' + escapeHtml(e.label) + "</span>";
+    }).join("") + "</p>";
+  }
+
+  function applyDocumentsLive(data) {
+    var box = document.getElementById("vacare-documents-on-file");
+    if (!box) return;
+    var prev = box.dataset.count || "0";
+    var next = String(data.evidence_count || 0);
+    if (prev !== next) {
+      renderDocuments(box, data.evidence || []);
+      box.dataset.count = next;
+      if (parseInt(next, 10) > parseInt(prev, 10)) {
+        showNotice(document.getElementById("vacare-live-notice"), "Documents updated");
+      }
+    }
+  }
+
+  function applyCaseLive(data, role) {
+    var claimId = data.case_id;
+    var thread = document.querySelector('[data-live-claim="' + claimId + '"]');
+    var notice = document.getElementById("vacare-live-notice");
+    var msgs = data.messages || [];
+    var acked = thread ? (thread.dataset.ackedLatest || thread.dataset.initialLatest || "") : "";
+
+    if (thread) {
+      var prevCount = parseInt(thread.dataset.count || "0", 10);
+      var prevLatest = thread.dataset.renderedLatest || thread.dataset.initialLatest || "";
+      var latestId = data.latest_message_id || "";
+      if (msgs.length !== prevCount || latestId !== prevLatest) {
+        if (thread.dataset.liveStyle === "chat") {
+          renderChatMessages(thread, msgs);
+        } else if (role === "vso") {
+          renderVsoThread(thread, msgs);
+        } else {
+          renderVeteranMessages(thread, msgs);
+        }
+        thread.dataset.count = String(msgs.length);
+        thread.dataset.renderedLatest = latestId;
+      }
+      var section = document.getElementById("vacare-messages-section");
+      if (section) section.hidden = msgs.length === 0;
+      var chatSection = document.getElementById("vacare-chat-messages-section");
+      if (chatSection) chatSection.hidden = msgs.length === 0;
+    }
+
+    var latest = data.latest_message_id || "";
+    if (latest && latest !== acked && msgs.length) {
+      var last = msgs[msgs.length - 1];
+      var fromOther =
+        (role === "veteran" && last.author === "vso") ||
+        (role === "vso" && isVeteranActivity(last));
+      if (fromOther) {
+        showNotice(
+          notice,
+          role === "veteran"
+            ? "New message from your VSO"
+            : veteranActivityNotice(last)
+        );
+      }
+    }
+
+    if (role === "veteran") {
+      applyNextSteps(data);
+    }
+    applyDocumentsLive(data);
+  }
+
+  function vsoSeenKey(claimId) {
+    return "vso_seen_" + claimId;
+  }
+
+  function isVsoInboxActivity(row) {
+    if (!row || !row.latest_message_id) return false;
+    if (row.latest_author === "veteran") return true;
+    if (row.latest_author !== "system") return false;
+    var preview = (row.latest_preview || "").toLowerCase();
+    return preview.indexOf("upload:") === 0 ||
+      preview === "user uploaded a document." ||
+      preview === "veteran uploaded a document.";
+  }
+
+  function ackLatest(claimId) {
+    var thread = document.querySelector('[data-live-claim="' + claimId + '"]');
+    if (!thread) return;
+    fetch("/api/cases/" + claimId + "/live")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var latest = data.latest_message_id || "";
+        thread.dataset.ackedLatest = latest;
+        thread.dataset.renderedLatest = latest;
+        sessionStorage.setItem(seenKey(claimId), latest);
+        sessionStorage.setItem(vsoSeenKey(claimId), latest);
+        hideNotice(document.getElementById("vacare-live-notice"));
+      })
+      .catch(function () {});
+  }
+
+  function pollCase(claimId, role) {
+    fetch("/api/cases/" + claimId + "/live")
+      .then(function (r) { return r.json(); })
+      .then(function (data) { applyCaseLive(data, role); })
+      .catch(function () {});
+  }
+
+  function startCasePoll(claimId, role) {
+    var thread = document.querySelector('[data-live-claim="' + claimId + '"]');
+    if (thread) {
+      thread.dataset.ackedLatest = thread.dataset.initialLatest || "";
+      thread.dataset.renderedLatest = thread.dataset.initialLatest || "";
+      sessionStorage.setItem(seenKey(claimId), thread.dataset.ackedLatest);
+      if (role === "vso") {
+        sessionStorage.setItem(vsoSeenKey(claimId), thread.dataset.ackedLatest);
+      }
+    }
+    pollCase(claimId, role);
+    setInterval(function () { pollCase(claimId, role); }, POLL_MS);
+  }
+
+  function renderQueue(container, rows, emptyHtml) {
+    if (!rows.length) {
+      container.innerHTML = emptyHtml;
+      return;
+    }
+    container.innerHTML = rows.map(function (row) {
+      var badgeClass = row.status === "ready_for_vso" ? "b-wait" : "b-review";
+      return '<a href="/cases/' + row.claim_id + '" class="queue-card">' +
+        '<div class="queue-card-head"><strong>' + escapeHtml(row.veteran_name) + "</strong>" +
+        '<span class="badge ' + badgeClass + '">' + row.status.replace(/_/g, " ") + "</span></div>" +
+        '<p class="muted">' + escapeHtml(row.conditions) + "</p>" +
+        '<p class="queue-meta">Submitted ' + row.created_on + "</p></a>";
+    }).join("");
+  }
+
+  function startQueuePoll(container, emptyHtml) {
+    function tick() {
+      fetch("/api/vso/queue")
+        .then(function (r) { return r.json(); })
+        .then(function (rows) { renderQueue(container, rows, emptyHtml); })
+        .catch(function () {});
+    }
+    tick();
+    setInterval(tick, POLL_MS);
+  }
+
+  function applyInbox(rows) {
+    rows.forEach(function (row) {
+      var badge = document.querySelector('[data-live-badge="' + row.claim_id + '"]');
+      if (!badge) return;
+      var seen = sessionStorage.getItem(seenKey(row.claim_id)) || "";
+      var isNew = row.latest_message_id && row.latest_author === "vso" && row.latest_message_id !== seen;
+      badge.hidden = !isNew;
+      if (isNew && row.latest_preview) {
+        badge.title = row.latest_preview;
+      }
+    });
+  }
+
+  function startInboxPoll() {
+    function tick() {
+      fetch("/api/live/inbox")
+        .then(function (r) { return r.json(); })
+        .then(applyInbox)
+        .catch(function () {});
+    }
+    tick();
+    setInterval(tick, POLL_MS);
+  }
+
+  document.addEventListener("click", function (event) {
+    var dismiss = event.target.closest("[data-live-dismiss]");
+    if (dismiss) {
+      var thread = document.querySelector("[data-live-claim]");
+      if (thread) ackLatest(thread.getAttribute("data-live-claim"));
+      else hideNotice(document.getElementById("vacare-live-notice"));
+    }
+  });
+
+  function startVsoInboxPoll() {
+    function tick() {
+      fetch("/api/live/inbox")
+        .then(function (r) { return r.json(); })
+        .then(function (rows) {
+          var notice = document.getElementById("vacare-live-notice");
+          var onCasePage = !!document.querySelector("[data-live-claim]");
+          rows.forEach(function (row) {
+            if (!isVsoInboxActivity(row)) return;
+            var seen = sessionStorage.getItem(vsoSeenKey(row.claim_id)) || "";
+            var isNew = row.latest_message_id && row.latest_message_id !== seen;
+            var card = document.querySelector('[data-vso-queue-card="' + row.claim_id + '"]');
+            if (card) {
+              var badge = card.querySelector(".vso-activity-badge");
+              if (badge) badge.hidden = !isNew;
+            }
+            if (isNew && notice && !onCasePage) {
+              showNotice(notice, "Veteran uploaded a document");
+            }
+          });
+        })
+        .catch(function () {});
+    }
+    tick();
+    setInterval(tick, POLL_MS);
+  }
+
+  window.VacareLive = {
+    POLL_MS: POLL_MS,
+    startCasePoll: startCasePoll,
+    startQueuePoll: startQueuePoll,
+    startInboxPoll: startInboxPoll,
+    startVsoInboxPoll: startVsoInboxPoll,
+  };
+})();
+</script>

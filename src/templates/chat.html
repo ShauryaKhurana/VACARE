@@ -1,218 +1,459 @@
 {% extends "base.html" %}
+{% from "partials/itf_help.html" import button as itf_help_btn, modal as itf_help_modal %}
+{% from "partials/poa_help.html" import button as poa_help_btn, modal as poa_help_modal %}
+{% block title %}VACARE{% endblock %}
+{% block body_class %}chat-page{% endblock %}
+
+{% block page_styles %}
+  body.chat-page { background:#f5f5f7; padding:0; }
+  body.chat-page .sheet { max-width:100%; margin:0; padding:0; min-height:100dvh; display:flex; flex-direction:column; }
+  body.chat-page .eyebrow, body.chat-page nav, body.chat-page #vacare-key-status { display:none; }
+  body.chat-page .disclaimer { display:none; }
+
+  .chat-app { display:flex; flex-direction:column; height:100dvh; max-width:720px; margin:0 auto; width:100%; }
+
+  .chat-top {
+    flex-shrink:0; padding:14px 16px 10px;
+    background:rgba(245,245,247,0.92); backdrop-filter:blur(12px);
+    border-bottom:1px solid rgba(0,0,0,0.06);
+    display:flex; align-items:center; gap:10px;
+  }
+  .chat-home-btn {
+    flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    width:34px; height:34px; border-radius:10px;
+    border:none; background:transparent; color:#1d1d1f;
+    text-decoration:none; cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .chat-home-btn:hover { background:rgba(0,0,0,0.06); color:#0071e3; }
+  .chat-home-btn svg { width:18px; height:18px; display:block; }
+  .chat-top-brand { font-weight:600; font-size:15px; letter-spacing:-0.02em; color:#1d1d1f; }
+  .chat-top-progress {
+    flex:1; text-align:center; font-size:12px; color:#86868b;
+  }
+  .chat-top-progress span { color:#1d1d1f; font-weight:500; }
+  .chat-top-link {
+    font-size:13px; color:#86868b; text-decoration:none; background:none; border:none;
+    cursor:pointer; padding:4px 0; font-family:inherit;
+  }
+  .chat-top-link:hover { color:#1d1d1f; }
+
+  .chat-thread {
+    flex:1; overflow-y:auto; padding:20px 16px 24px;
+    scroll-behavior:smooth;
+  }
+
+  .chat-row { display:flex; margin-bottom:16px; animation:fadeUp .25s ease; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  .chat-row.user { justify-content:flex-end; }
+  .chat-row.assistant { justify-content:flex-start; }
+
+  .chat-bubble {
+    max-width:min(88%, 520px); padding:12px 16px; font-size:15px; line-height:1.45;
+    border-radius:20px; word-wrap:break-word;
+  }
+  .chat-row.assistant .chat-bubble {
+    background:#fff; color:#1d1d1f;
+    box-shadow:0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+    border-bottom-left-radius:6px;
+  }
+  .chat-row.user .chat-bubble {
+    background:#0071e3; color:#fff;
+    border-bottom-right-radius:6px;
+  }
+  .chat-row.user .chat-bubble.upload { background:#e8e8ed; color:#1d1d1f; font-size:14px; }
+
+  .chat-receipt {
+    margin-top:10px; padding:10px 12px; background:#f5f5f7; border-radius:12px;
+    font-size:13px; color:#424245;
+  }
+  .chat-receipt-title { font-weight:600; color:#1d1d1f; margin-bottom:6px; font-size:13px; }
+  .chat-receipt-line { padding:2px 0; }
+
+  .chat-summary {
+    background:#fff; border-radius:16px; padding:16px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    max-width:100%;
+  }
+  .chat-summary h3 { margin:0 0 8px; font-size:17px; font-weight:600; letter-spacing:-0.02em; }
+  .chat-summary-meta { font-size:13px; color:#86868b; margin-bottom:14px; }
+  .chat-summary ul { margin:0; padding:0; list-style:none; }
+  .chat-summary li { padding:8px 0; border-top:1px solid #f0f0f2; font-size:14px; }
+  .chat-summary li:first-child { border-top:none; padding-top:0; }
+  .chat-summary li b { display:block; font-weight:600; margin-bottom:2px; }
+  .chat-summary li span { color:#86868b; font-size:13px; }
+
+  .chat-actions { display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+  .chat-action-primary {
+    display:block; text-align:center; padding:13px 20px; border-radius:12px;
+    background:#0071e3; color:#fff; font-weight:600; font-size:15px;
+    text-decoration:none; border:none; cursor:pointer; font-family:inherit;
+  }
+  .chat-action-primary:hover { background:#0077ed; }
+  .chat-action-primary:disabled { background:#c7c7cc; cursor:not-allowed; }
+  .chat-action-secondary {
+    display:block; text-align:center; padding:11px 20px; border-radius:12px;
+    background:transparent; color:#0071e3; font-size:14px; text-decoration:none;
+    border:none; cursor:pointer; font-family:inherit;
+  }
+  .chat-action-note { font-size:12px; color:#86868b; text-align:center; margin-top:4px; line-height:1.4; }
+
+  .chat-warn {
+    margin-top:12px; padding:10px 12px; background:#fff5f5; border-radius:10px;
+    font-size:13px; color:#b3261e;
+  }
+
+  .chat-vso-thread { margin-top:14px; padding-top:12px; border-top:1px solid #f0f0f2; }
+  .chat-itf-row {
+    display:flex; align-items:center; gap:8px; margin-top:14px;
+  }
+  .chat-itf-label { font-weight:600; font-size:14px; color:#1d1d1f; flex:1; }
+  .chat-tip-row { display:flex; align-items:flex-start; gap:8px; justify-content:space-between; }
+  .chat-tip-row span { flex:1; }
+  .chat-vso-msg { font-size:13px; padding:8px 10px; margin:6px 0; border-radius:10px; background:#f5f5f7; }
+  .chat-vso-msg.vso { background:#e8eefb; }
+  .chat-vso-msg.system { background:transparent; color:var(--muted,#62666d); font-style:italic; padding:4px 0; }
+  .chat-vso-reply textarea {
+    width:100%; padding:10px; border:1px solid #d2d2d7; border-radius:10px; font-family:inherit; font-size:14px;
+  }
+  .chat-vso-reply button {
+    margin-top:8px; width:100%; padding:10px; border:none; border-radius:10px;
+    background:#0071e3; color:#fff; font-weight:600; cursor:pointer;
+  }
+
+  .chat-composer-wrap {
+    flex-shrink:0; padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+    background:linear-gradient(transparent, #f5f5f7 20%);
+  }
+  .chat-composer-inner { max-width:720px; margin:0 auto; }
+
+  .chat-tip {
+    font-size:12px; color:#86868b; line-height:1.45; margin-bottom:10px;
+    padding:10px 12px; background:#fff; border-radius:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .chat-suggestions {
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;
+  }
+  .chat-suggestion {
+    padding:7px 14px; border-radius:20px; border:1px solid rgba(0,0,0,0.08);
+    background:#fff; color:#1d1d1f; font-size:13px; cursor:pointer;
+    font-family:inherit; transition:background .15s;
+  }
+  .chat-suggestion:hover { background:#f0f0f2; }
+
+  .chat-composer {
+    display:flex; align-items:flex-end; gap:8px;
+    background:#fff; border-radius:24px; padding:8px 8px 8px 16px;
+    box-shadow:0 0 0 1px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .chat-composer textarea {
+    flex:1; border:none; outline:none; resize:none; background:transparent;
+    font-family:inherit; font-size:15px; line-height:1.4; padding:6px 0;
+    max-height:120px; min-height:24px;
+  }
+  .chat-composer textarea::placeholder { color:#aeaeb2; }
+
+  .chat-attach {
+    position:relative; flex-shrink:0; width:36px; height:36px;
+  }
+  .chat-attach input[type=file] {
+    display:none;
+  }
+  .chat-attach-btn {
+    display:flex; align-items:center; justify-content:center;
+    width:36px; height:36px; border-radius:50%; border:none; background:transparent;
+    color:#86868b; cursor:pointer; font-size:20px; line-height:1;
+    font-family:inherit; padding:0;
+  }
+  .chat-attach-btn:hover { background:#f5f5f7; color:#1d1d1f; }
+
+  .chat-send {
+    flex-shrink:0; width:36px; height:36px; border-radius:50%; border:none;
+    background:#0071e3; color:#fff; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .chat-send:hover { background:#0077ed; }
+  .chat-send:disabled { background:#c7c7cc; cursor:not-allowed; }
+
+  .chat-file-name { font-size:11px; color:#86868b; margin-top:6px; padding-left:4px; }
+
+  body.chat-page #vacare-loading { background:rgba(245,245,247,0.85); backdrop-filter:blur(8px); }
+  body.chat-page .loading-panel { border:none; box-shadow:0 8px 32px rgba(0,0,0,0.12); border-radius:16px; }
+{% endblock %}
+
+{% block disclaimer %}{% endblock %}
+
 {% block content %}
-<style>
-  .chatwrap { display:grid; grid-template-columns: 1fr 300px; gap:22px; align-items:start; }
-  @media (max-width:800px){ .chatwrap { grid-template-columns:1fr; } }
-  .stream { border:1.6px solid var(--rule); border-radius:10px; padding:16px;
-            height:460px; overflow-y:auto; background:#fff; }
-  .bubble { max-width:88%; padding:10px 13px; border-radius:12px; margin:10px 0;
-            font-size:14.5px; line-height:1.45; white-space:pre-wrap; }
-  .bot  { background:var(--wash); border:1px solid var(--rule); border-bottom-left-radius:3px; }
-  .vet  { background:var(--you); color:#fff; margin-left:auto; border-bottom-right-radius:3px; }
-  .vet.file { background:#fff; color:var(--you); border:1.5px dashed var(--you); font-family:"Courier Prime",monospace; font-size:13px; }
-  .typing { color:var(--muted); font-size:13px; font-style:italic; margin:8px 0; }
-  .composer { margin-top:14px; }
-  .composer textarea { resize:vertical; }
-  .quick { margin:8px 0 4px; }
-  .quick button { margin:0 6px 6px 0; font-weight:400; font-size:13.5px; padding:6px 12px; }
-  .drop { border:2px dashed var(--rule); border-radius:8px; padding:14px; text-align:center;
-          color:var(--muted); font-size:13.5px; margin-top:10px; cursor:pointer; }
-  .drop.over { border-color:var(--you); background:#f2f6ff; color:var(--you); }
-  .panel { border:1.6px solid var(--ink); border-radius:10px; padding:14px 16px; font-size:13.5px; }
-  .panel h4 { font-family:"Archivo",sans-serif; font-size:13px; text-transform:uppercase;
-              letter-spacing:.08em; color:var(--muted); margin:14px 0 6px; }
-  .panel h4:first-child { margin-top:0; }
-  .chip { display:inline-block; background:var(--wash); border:1px solid var(--rule);
-          border-radius:20px; padding:2px 10px; margin:2px 3px 2px 0; font-size:12.5px; }
-  .cond { padding:7px 0; border-bottom:1px solid var(--rule); }
-  .cond:last-child { border-bottom:none; }
-  .empty { color:var(--muted); font-style:italic; }
-  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
-  .req { background:var(--lock); } .sug { background:var(--emp); }
-</style>
-
-<h1>Talk to VACARE</h1>
-<p class="muted">Answer in your own words. I ask as little as possible and read the rest off your
-documents. Nothing is filed anywhere.</p>
-
-<div id="nokey" class="banner" style="border-left-color:#b3261e; display:none">
-  No <span class="form-no">GEMINI_API_KEY</span> in <span class="form-no">.env</span>, so I can't
-  read documents or parse your story.
-</div>
-
-<div class="chatwrap">
-  <div>
-    <div class="stream" id="stream"></div>
-
-    <div class="composer">
-      <div class="quick" id="quick"></div>
-      <div id="prompt" class="muted" style="font-size:13px; margin-bottom:5px"></div>
-      <textarea id="input" rows="2" placeholder="Type your answer, then press Enter..."></textarea>
-      <div class="drop" id="drop">
-        Drop a file here, or <u>click to choose</u> - DD-214, medical records, decision letter
-      </div>
-      <input type="file" id="file" style="display:none"
-             accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt">
-      <p style="margin-top:12px">
-        <button id="send">Send</button>
-        <button id="finish" class="btn" style="display:none">Build my claim packet</button>
-        <button id="reset" class="btn ghost" type="button">Start over</button>
-      </p>
+<div class="chat-app">
+  <header class="chat-top">
+    <a href="/" class="chat-home-btn" title="Home" aria-label="Home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/>
+      </svg>
+    </a>
+    <div class="chat-top-brand">VACARE</div>
+    {% if progress %}
+    <div class="chat-top-progress">
+      <span>{{ progress.label }}</span> · {{ progress.step }}/{{ progress.total }}
     </div>
-  </div>
+    {% else %}
+    <div class="chat-top-progress"><span>Claim prep</span></div>
+    {% endif %}
+    <button type="button" id="vacare-test-key" class="chat-top-link" title="Test API key">API</button>
+    <a href="/chat/reset" class="chat-top-link">Reset</a>
+  </header>
+  <div id="vacare-key-status" class="key-status" role="status" aria-live="polite"
+       style="margin:0 20px 8px; display:none"></div>
 
-  <div class="panel" id="panel">
-    <h4>What I have</h4>
-    <div class="empty" id="factsEmpty">Nothing yet.</div>
-    <div id="facts"></div>
-  </div>
+  <main class="chat-thread" id="chat-thread">
+    {% if not have_key %}
+    <div class="chat-row assistant">
+      <div class="chat-bubble">Document reading is off — add an API key to <code>.env</code> to enable uploads.</div>
+    </div>
+    {% endif %}
+
+    {% for msg in session.transcript %}
+      {% if msg.role == 'bot' %}
+      <div class="chat-row assistant">
+        <div class="chat-bubble">
+          {{ msg.text }}
+          {% if msg.detail %}
+          <div class="chat-receipt">
+            {% for line in msg.detail.split('\n') %}
+              {% if line.startswith('• ') %}
+                <div class="chat-receipt-line">{{ line[2:] }}</div>
+              {% elif line %}
+                <div class="chat-receipt-title">{{ line }}</div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="chat-row user">
+        <div class="chat-bubble{% if msg.text.startswith('[uploaded') %} upload{% endif %}">{{ msg.text }}</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if done %}
+    <div class="chat-row assistant">
+      <div class="chat-summary">
+        <h3>You're all set</h3>
+        <div id="vacare-live-notice" class="vacare-live-notice" hidden>
+          <span class="vacare-live-notice-text">New update</span>
+          <button type="button" data-live-dismiss>Dismiss</button>
+        </div>
+        <p class="chat-summary-meta">
+          {{ claim.veteran.full_name }}
+          {% if claim.veteran.service_start %} · {{ claim.veteran.service_start }}–{{ claim.veteran.service_end or 'now' }}{% endif %}
+        </p>
+        {% if claim.conditions %}
+        <ul>
+          {% for c in claim.conditions %}
+          <li><b>{{ c.name }}</b><span>{{ c.current_symptoms }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if readiness.missing %}
+        <div class="chat-warn">
+          Still need: {{ readiness.missing | join(', ') }}.
+        </div>
+        {% endif %}
+
+        {% if itf and itf.applies %}
+        <div class="chat-itf-row">
+          <span class="chat-itf-label">{{ itf_title }}</span>
+          {{ itf_help_btn() }}
+        </div>
+        <div class="chat-warn" style="{% if itf.urgency == 'ok' %}background:#eef8f1;color:#1e6f45{% endif %}">
+          {{ itf.message }}
+        </div>
+        {% if itf.urgency in ['missing', 'expired'] %}
+        <form method="post" action="/claim/{{ claim.id }}/itf" style="margin-top:8px">
+          <button type="submit" class="chat-action-secondary" style="width:100%">Yes — save today's date with the VA</button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if poa and poa.applies %}
+        <div class="chat-itf-row">
+          <span class="chat-itf-label">{{ poa_title }}</span>
+          {{ poa_help_btn() }}
+        </div>
+        <div class="chat-warn" style="{% if poa.urgency == 'ok' %}background:#eef8f1;color:#1e6f45{% endif %}">
+          {{ poa.message }}
+        </div>
+        {% if poa.urgency == 'missing' %}
+        <form method="post" action="/claim/{{ claim.id }}/poa" style="margin-top:8px">
+          <button type="submit" class="chat-action-secondary" style="width:100%">Yes — appoint a VSO (use today)</button>
+        </form>
+        {% endif %}
+        {% elif poa and poa.filing_on_own %}
+        <p class="chat-action-note">Filing on your own — no VSO appointment form needed.</p>
+        {% endif %}
+
+        {% if done %}
+        <div id="vacare-chat-messages-section" {% if not case_messages %}hidden{% endif %}>
+        <div class="chat-vso-thread">
+          <p class="chat-summary-meta"><b>Messages from your VSO</b></p>
+          <div id="vacare-msg-thread" data-live-claim="{{ claim.id }}" data-live-style="chat"
+               data-initial-latest="{{ latest_message_id }}" data-count="{{ case_messages|length }}">
+          {% for msg in case_messages %}
+          <div class="chat-vso-msg {{ msg.author.value }}">
+            {% if msg.author.value == 'system' %}<em>{{ msg|msg_veteran }}</em>{% else %}{{ msg.body }}{% endif %}
+          </div>
+          {% endfor %}
+          </div>
+        </div>
+        <form method="post" action="/claim/{{ claim.id }}/message" class="chat-vso-reply">
+          <textarea name="body" rows="2" placeholder="Reply to your VSO..." required></textarea>
+          <button type="submit">Send reply</button>
+        </form>
+        </div>
+        {% endif %}
+
+        <div class="chat-actions">
+          {% if not in_vso_queue and not vso_approved %}
+          <form method="post" action="/claim/{{ claim.id }}/vso-submit" style="margin:0">
+            <button type="submit" class="chat-action-primary" style="width:100%">Send to VSO for review</button>
+          </form>
+          <p class="chat-action-note" id="vacare-chat-status-note">A VSO will review your packet on their screen (localhost:8001 in demo).</p>
+          {% elif in_vso_queue %}
+          <p class="chat-action-note" id="vacare-chat-status-note">Waiting for VSO review. New messages appear here automatically.</p>
+          {% elif vso_approved %}
+          <p class="chat-action-note" id="vacare-chat-status-note">VSO approved your packet. You can test-submit to VA.</p>
+          {% endif %}
+          <a href="/claim/{{ claim.id }}/526ez" class="chat-action-primary">Download 21-526EZ</a>
+          <form method="post" action="/claim/{{ claim.id }}/va-intake" id="vacare-chat-va-form" style="margin:0" {% if not vso_approved %}hidden{% endif %}>
+            <button type="submit" class="chat-action-primary" style="width:100%">Send to VA sandbox</button>
+          </form>
+          <a href="/claim/{{ claim.id }}" class="chat-action-secondary">View summary</a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </main>
+
+  {% if not done %}
+  <footer class="chat-composer-wrap">
+    <div class="chat-composer-inner">
+      {% if question.slot.value == 'itf' and show_itf_help %}
+      <div class="chat-tip chat-tip-row">
+        <span>{{ question.help_text }}</span>
+        {{ itf_help_btn() }}
+      </div>
+      {% elif question.slot.value == 'poa' and show_poa_help %}
+      <div class="chat-tip chat-tip-row">
+        <span>{{ question.help_text }}</span>
+        {{ poa_help_btn() }}
+      </div>
+      {% elif question.doc_tip %}
+      <div class="chat-tip">{{ question.doc_tip }}</div>
+      {% elif question.help_text %}
+      <div class="chat-tip">{{ question.help_text }}</div>
+      {% endif %}
+
+      <form method="post" action="/chat" enctype="multipart/form-data" id="chat-form" data-vacare-loading>
+        <input type="hidden" name="quick_pick" id="chat-quick-pick" value="">
+
+        {% if question.options %}
+        <div class="chat-suggestions">
+          {% for option in question.options %}
+          <button type="button" class="chat-suggestion chat-quick-pick" data-value="{{ option }}">{{ option }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="chat-composer">
+          <textarea name="message" id="chat-input" rows="1"
+                    placeholder="{{ question.text }}"></textarea>
+          {% if question.accepts_upload %}
+          <div class="chat-attach" title="Attach PDF or photo">
+            <button type="button" class="chat-attach-btn" id="chat-attach-btn" aria-label="Attach file">+</button>
+            <input type="file" name="document" id="chat-file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.txt">
+          </div>
+          {% endif %}
+          <button type="button" class="chat-send" id="chat-send-btn" aria-label="Send">↑</button>
+        </div>
+        <div class="chat-file-name" id="chat-file-name"></div>
+      </form>
+    </div>
+  </footer>
+  {% endif %}
 </div>
+{% if show_itf_help %}{{ itf_help_modal() }}{% endif %}
+{% if show_poa_help %}{{ poa_help_modal() }}{% endif %}
+{% if done %}{% include "partials/live_client.html" %}
+<script>VacareLive.startCasePoll("{{ claim.id }}", "veteran");</script>{% endif %}
 
 <script>
-const $ = (id) => document.getElementById(id);
-let busy = false;
+(function () {
+  var thread = document.getElementById("chat-thread");
+  if (thread) thread.scrollTop = thread.scrollHeight;
 
-function bubble(role, text) {
-  const div = document.createElement('div');
-  const isFile = text.startsWith('[uploaded ');
-  div.className = 'bubble ' + (role === 'bot' ? 'bot' : 'vet' + (isFile ? ' file' : ''));
-  div.textContent = text;
-  return div;
-}
+  var form = document.getElementById("chat-form");
+  if (!form) return;
 
-function render(state) {
-  const stream = $('stream');
-  stream.innerHTML = '';
-  state.messages.forEach(m => stream.appendChild(bubble(m.role, m.text)));
-  stream.scrollTop = stream.scrollHeight;
+  var input = document.getElementById("chat-input");
+  var hidden = document.getElementById("chat-quick-pick");
+  var fileInput = document.getElementById("chat-file");
+  var fileName = document.getElementById("chat-file-name");
 
-  $('nokey').style.display = state.have_key ? 'none' : 'block';
+  if (input) {
+    input.addEventListener("input", function () {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    });
+    input.focus();
+  }
 
-  const q = state.question;
-  $('prompt').textContent = q.help || '';
-  $('input').rows = q.multiline ? 5 : 2;
-  $('input').style.display = state.done ? 'none' : 'block';
-  $('drop').style.display = (q.accepts_upload && !state.done) ? 'block' : 'none';
-  $('send').style.display = state.done ? 'none' : 'inline-block';
-  $('finish').style.display = state.done ? 'inline-block' : 'none';
-
-  const quick = $('quick');
-  quick.innerHTML = '';
-  if (!state.done) {
-    (q.options || []).forEach(opt => {
-      const b = document.createElement('button');
-      b.className = 'btn ghost'; b.textContent = opt; b.type = 'button';
-      b.onclick = () => send(opt);
-      quick.appendChild(b);
+  if (fileInput && fileName) {
+    fileInput.addEventListener("change", function () {
+      fileName.textContent = fileInput.files.length ? fileInput.files[0].name : "";
     });
   }
 
-  renderFacts(state.facts);
-}
-
-function renderFacts(f) {
-  $('factsEmpty').style.display = f.has_any ? 'none' : 'block';
-  const el = $('facts');
-  el.innerHTML = '';
-  if (!f.has_any) return;
-
-  const add = (html) => { const d = document.createElement('div'); d.innerHTML = html; el.appendChild(d); };
-
-  if (f.name || f.dob || f.service) {
-    add('<h4>Veteran</h4>');
-    if (f.name)    add('<b>' + f.name + '</b>');
-    if (f.dob)     add('born ' + f.dob);
-    if (f.branch)  add(f.branch + (f.discharge && f.discharge !== 'unknown' ? ' &middot; ' + f.discharge : ''));
-    if (f.service) add('<span class="muted">' + f.service + '</span>');
-  }
-  if (f.rating !== null && f.rating !== undefined) add('<div>Rated ' + f.rating + '%</div>');
-  if (f.lane) { add('<h4>Lane</h4>'); add(f.lane); }
-
-  if (f.conditions.length) {
-    add('<h4>Conditions</h4>');
-    f.conditions.forEach(c => add(
-      '<div class="cond"><b>' + c.name + '</b><br>' +
-      '<span class="muted">' + (c.onset ? c.onset + ' &middot; ' : '') + c.link + '</span></div>'));
-  }
-  if (f.documents.length) {
-    add('<h4>Documents read</h4>');
-    add(f.documents.map(d => '<span class="chip">' + d + '</span>').join(''));
-  }
-  if (f.deadlines.length) {
-    add('<h4>Clocks</h4>');
-    f.deadlines.forEach(d => add('<div class="' + d.urgency + '">' + d.label +
-      ' <span class="days">' + (d.days < 0 ? 'EXPIRED' : d.days + 'd') + '</span></div>'));
-  }
-  if (f.missing.length) {
-    add('<h4>Still needed</h4>');
-    f.missing.slice(0, 6).forEach(m => add(
-      '<div><span class="dot ' + (m.required ? 'req' : 'sug') + '"></span>' + m.label +
-      (m.scope ? ' <span class="muted">(' + m.scope + ')</span>' : '') + '</div>'));
-  }
-}
-
-function thinking(on) {
-  busy = on;
-  $('send').disabled = on;
-  const existing = document.querySelector('.typing');
-  if (existing) existing.remove();
-  if (on) {
-    const t = document.createElement('div');
-    t.className = 'typing'; t.textContent = 'reading...';
-    $('stream').appendChild(t);
-    $('stream').scrollTop = $('stream').scrollHeight;
-  }
-}
-
-async function send(text) {
-  if (busy) return;
-  const value = (text !== undefined ? text : $('input').value).trim();
-  if (!value) return;
-  $('stream').appendChild(bubble('veteran', value));
-  $('input').value = '';
-  thinking(true);
-  const res = await fetch('/api/chat/message', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({message: value})
+  form.querySelectorAll(".chat-quick-pick").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (hidden) hidden.value = btn.getAttribute("data-value") || btn.textContent.trim();
+      form.requestSubmit();
+    });
   });
-  thinking(false);
-  render(await res.json());
-}
 
-async function upload(file) {
-  if (busy || !file) return;
-  $('stream').appendChild(bubble('veteran', '[uploaded ' + file.name + ']'));
-  thinking(true);
-  const body = new FormData();
-  body.append('document', file);
-  const res = await fetch('/api/chat/upload', {method: 'POST', body});
-  thinking(false);
-  render(await res.json());
-}
+  var sendBtn = document.getElementById("chat-send-btn");
+  var attachBtn = document.getElementById("chat-attach-btn");
 
-$('send').onclick = () => send();
-$('input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-$('drop').onclick = () => $('file').click();
-$('file').onchange = (e) => upload(e.target.files[0]);
-['dragenter','dragover'].forEach(ev => $('drop').addEventListener(ev, (e) => {
-  e.preventDefault(); $('drop').classList.add('over');
-}));
-['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, (e) => {
-  e.preventDefault(); $('drop').classList.remove('over');
-}));
-$('drop').addEventListener('drop', (e) => upload(e.dataTransfer.files[0]));
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener("click", function () {
+      fileInput.click();
+    });
+  }
 
-$('finish').onclick = async () => {
-  const res = await fetch('/api/chat/finish', {method: 'POST'});
-  window.location = (await res.json()).url;
-};
-$('reset').onclick = async () => {
-  await fetch('/api/chat/reset', {method: 'POST'});
-  window.location.reload();
-};
+  if (sendBtn) {
+    sendBtn.addEventListener("click", function () {
+      if (hidden) hidden.value = "";
+      form.requestSubmit();
+    });
+  }
 
-fetch('/api/chat').then(r => r.json()).then(render);
+  if (input) {
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        if (hidden) hidden.value = "";
+        form.requestSubmit();
+      }
+    });
+  }
+
+  form.addEventListener("submit", function () {
+    if (sendBtn) sendBtn.disabled = true;
+  });
+})();
 </script>
 {% endblock %}

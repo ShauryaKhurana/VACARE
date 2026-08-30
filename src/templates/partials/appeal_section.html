@@ -1,0 +1,95 @@
+{# Interactive appeal lane entry (M10-lite) #}
+<style>
+  .appeal-card.selected { border-color:var(--ok); background:#f0faf4; }
+  .appeal-picker-btn {
+    display:block; width:100%; text-align:left; margin-bottom:8px; padding:12px 14px;
+    border:1.6px solid var(--rule); border-radius:6px; background:#fff; cursor:pointer;
+    font:inherit; font-size:14px;
+  }
+  .appeal-picker-btn:hover { border-color:var(--you); background:#eef3fc; }
+  .appeal-picker-btn b { display:block; margin-bottom:4px; }
+  .appeal-picker-btn span { color:var(--muted); font-size:13px; }
+  .appeal-checklist { margin:12px 0 0; padding-left:18px; font-size:14px; }
+  .appeal-checklist li { margin-bottom:8px; }
+</style>
+
+{% if appeal.applies and tracker.decision.has_decision %}
+<h2 style="margin-top:28px">{{ appeal_title }}</h2>
+<p class="muted" style="font-size:14px;margin-top:-4px">{{ appeal_explainer }}</p>
+
+{% if appeal.selected_door %}
+<div class="banner" style="border-left-color:var(--ok);margin-top:12px">
+  <b>Your review path: VA Form {{ appeal.selected_door }}</b>
+  <p style="margin:8px 0 0;font-size:14px">{{ appeal.message }}</p>
+  {% if appeal.form_url %}
+  <p style="margin:12px 0 0">
+    <a href="{{ appeal.form_url }}" target="_blank" rel="noopener" class="btn">Open form on VA.gov ↗</a>
+  </p>
+  {% endif %}
+</div>
+
+{% if appeal.checklist %}
+<h3 style="margin-top:18px">Before you file</h3>
+<ul class="appeal-checklist">
+  {% for item in appeal.checklist %}
+  <li><b>{{ item.label }}</b><br><span class="muted" style="font-size:13px">{{ item.detail }}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<p style="margin-top:14px">
+  <a href="/claim/{{ claim.id }}/appeal-chat" class="btn ghost">Walk through again in chat</a>
+  <form method="post" action="/claim/{{ claim.id }}/appeal/reset" style="display:inline;margin-left:8px">
+    <button type="submit" class="btn ghost">Change path</button>
+  </form>
+</p>
+
+{% elif not appeal.disagrees %}
+<div class="wash" style="margin-top:12px">
+  <p style="margin:0 0 12px;font-size:14px">Not what you expected?</p>
+  <form method="post" action="/claim/{{ claim.id }}/appeal/disagree" style="display:inline">
+    <button type="submit">Yes — I want to challenge this</button>
+  </form>
+  <form method="post" action="/claim/{{ claim.id }}/appeal/accept" style="display:inline;margin-left:8px">
+    <button type="submit" class="btn ghost">No — decision looks right</button>
+  </form>
+  <p class="muted" style="font-size:13px;margin:12px 0 0">
+    Or <a href="/claim/{{ claim.id }}/appeal-chat">use the chat guide</a> to pick a path step by step.
+  </p>
+</div>
+
+{% else %}
+<p class="muted" style="font-size:14px;margin-top:8px">{{ appeal.message }}</p>
+{% for opt in appeal.picker_options %}
+<form method="post" action="/claim/{{ claim.id }}/appeal">
+  <input type="hidden" name="door" value="{{ opt.form_number }}">
+  <button type="submit" class="appeal-picker-btn">
+    <b>{{ opt.title }} · Form {{ opt.form_number }}</b>
+    <span>{{ opt.picker_label }}</span>
+  </button>
+</form>
+{% endfor %}
+{% endif %}
+
+{% if tracker.appeal_doors and appeal.disagrees %}
+<h3 style="margin-top:22px">Quick comparison</h3>
+{% for door in tracker.appeal_doors %}
+<div class="appeal-card{% if door.selected %} selected{% elif door.recommended %} recommended{% endif %}">
+  <div class="form-no">VA Form {{ door.form_number }}
+    {% if door.selected %} · your choice{% elif door.recommended %} · suggested{% endif %}
+  </div>
+  <b style="display:block;margin:6px 0 4px">{{ door.title }}</b>
+  <p style="margin:0;font-size:14px">{{ door.detail }}</p>
+  {% if door.lock %}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">{{ door.lock }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% elif tracker.legacy_decision %}
+<div class="banner warn" style="margin-top:18px">
+  This decision predates Feb 19, 2019 and may follow legacy appeal rules.
+  Confirm next steps with your VSO — this tool focuses on modern review options.
+</div>
+{% endif %}

@@ -1,0 +1,83 @@
+{% extends "vso/base.html" %}
+{% block title %}VSO inbox · VACARE{% endblock %}
+{% block content %}
+<h1>Review queue</h1>
+<p class="muted">New submissions appear here automatically — no refresh needed.</p>
+
+{% if message %}<div class="banner">{{ message|replace('+',' ') }}</div>{% endif %}
+
+<div id="vacare-live-notice" class="vacare-live-notice" hidden>
+  <span class="vacare-live-notice-text">Queue updated</span>
+  <button type="button" data-live-dismiss>Dismiss</button>
+</div>
+
+<div id="vso-queue" class="queue-list">
+{% if queue %}
+  {% for id, name, status, created, conds in queue %}
+  <a href="/cases/{{ id }}" class="queue-card" data-vso-queue-card="{{ id }}">
+    <div class="queue-card-head">
+      <strong>{{ name }}</strong>
+      <span class="badge {% if status == 'ready_for_vso' %}b-wait{% else %}b-review{% endif %}">
+        {{ status.replace('_',' ') }}
+      </span>
+      <span class="vso-activity-badge" hidden>New activity</span>
+    </div>
+    <p class="muted">{{ conds }}</p>
+    <p class="queue-meta">Submitted {{ created }}</p>
+  </a>
+  {% endfor %}
+{% else %}
+  <div class="wash empty-state">
+    <p><b>No claims waiting.</b></p>
+    <p class="muted">When a veteran clicks “Send to VSO for review” on <a href="{{ veteran_app }}/chat" target="_blank" rel="noopener">the veteran app</a>, it will show up here.</p>
+  </div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% include "partials/live_client.html" %}
+<script>
+(function () {
+  var container = document.getElementById("vso-queue");
+  var emptyHtml = '<div class="wash empty-state"><p><b>No claims waiting.</b></p>' +
+    '<p class="muted">When a veteran sends a claim for review, it will show up here.</p></div>';
+  var prevIds = Array.prototype.map.call(
+    container.querySelectorAll(".queue-card"),
+    function (el) { return el.getAttribute("href").split("/").pop(); }
+  ).sort().join(",");
+  function tick() {
+    fetch("/api/vso/queue")
+      .then(function (r) { return r.json(); })
+      .then(function (rows) {
+        var ids = rows.map(function (r) { return r.claim_id; }).sort().join(",");
+        if (ids !== prevIds) {
+          var notice = document.getElementById("vacare-live-notice");
+          if (notice && rows.length > prevIds.split(",").filter(Boolean).length) {
+            notice.querySelector(".vacare-live-notice-text").textContent = "New claim in queue";
+            notice.hidden = false;
+          }
+          prevIds = ids;
+        }
+        if (!rows.length) {
+          container.innerHTML = emptyHtml;
+          return;
+        }
+        container.innerHTML = rows.map(function (row) {
+          var badgeClass = row.status === "ready_for_vso" ? "b-wait" : "b-review";
+          return '<a href="/cases/' + row.claim_id + '" class="queue-card" data-vso-queue-card="' + row.claim_id + '">' +
+            '<div class="queue-card-head"><strong>' + row.veteran_name.replace(/</g, "&lt;") + '</strong>' +
+            '<span class="badge ' + badgeClass + '">' + row.status.replace(/_/g, " ") + '</span>' +
+            '<span class="vso-activity-badge" hidden>New activity</span></div>' +
+            '<p class="muted">' + row.conditions.replace(/</g, "&lt;") + '</p>' +
+            '<p class="queue-meta">Submitted ' + row.created_on + '</p></a>';
+        }).join("");
+      })
+      .catch(function () {});
+  }
+  tick();
+  setInterval(tick, VacareLive.POLL_MS);
+  VacareLive.startVsoInboxPoll();
+})();
+</script>
+{% endblock %}

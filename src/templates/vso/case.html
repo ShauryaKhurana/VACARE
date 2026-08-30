@@ -1,0 +1,166 @@
+{% extends "vso/base.html" %}
+{% block title %}{{ claim.veteran.full_name }} · VSO{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/">← Inbox</a></p>
+<h1>{{ claim.veteran.full_name }}</h1>
+<p class="muted">{{ status_label }} · Case {{ claim.id }}</p>
+
+{% if message %}<div class="banner">{{ message|replace('+',' ') }}</div>{% endif %}
+
+{% if tracker.submitted_on %}
+<div class="card side-card" style="margin-bottom:16px;grid-column:1/-1">
+  <h3>Claim status</h3>
+  <p style="margin:8px 0 0;font-size:14px">
+    {% if tracker.decision.has_decision %}
+    <b>Decision received</b> · {{ tracker.decision.outcome_label }} ({{ tracker.decision.decision_date }})
+    {% else %}
+    <b>Submitted to VA</b> · {{ tracker.submitted_on }}{% if tracker.va_status %} · {{ tracker.va_status }}{% endif %}
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+
+{% if appeal.selected_door %}
+<div class="card side-card" style="margin-bottom:16px;grid-column:1/-1;border-left:4px solid var(--ok,#1e6f45)">
+  <h3>Appeal path</h3>
+  <p style="margin:8px 0 0;font-size:14px">
+    Veteran selected <b>VA Form {{ appeal.selected_door }}</b>
+    {% if appeal.recommended_door and appeal.recommended_door != appeal.selected_door %}
+    · system suggested {{ appeal.recommended_door }}
+    {% endif %}
+  </p>
+</div>
+{% elif appeal.disagrees %}
+<div class="card side-card" style="margin-bottom:16px;grid-column:1/-1">
+  <h3>Appeal path</h3>
+  <p style="margin:8px 0 0;font-size:14px">Veteran disagrees with the decision — path not chosen yet.</p>
+</div>
+{% endif %}
+
+<div class="case-grid">
+  <section class="case-main">
+    <h2>Veteran summary</h2>
+    <div class="wash">
+      {% if claim.veteran.dob %}DOB {{ claim.veteran.dob }} · {% endif %}
+      {% if claim.veteran.branch %}{{ claim.veteran.branch.value.replace('_',' ') }} · {% endif %}
+      {% if claim.veteran.service_start %}Served {{ claim.veteran.service_start }}–{{ claim.veteran.service_end or 'present' }}{% endif %}
+      {% if claim.veteran.email %}<br>Contact: {{ claim.veteran.email }}{% if claim.veteran.phone %} · {{ claim.veteran.phone }}{% endif %}{% endif %}
+    </div>
+
+    {% if claim.conditions %}
+    <h3>Conditions</h3>
+    <ul class="cond-list">
+      {% for c in claim.conditions %}
+      <li><b>{{ c.name }}</b> — {{ c.current_symptoms }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h3>Documents on file</h3>
+    <div id="vacare-documents-on-file" data-count="{{ claim.evidence|length }}">
+      {% if claim.evidence %}
+      <p>{% for e in claim.evidence %}<span class="badge b-doc" style="margin-right:6px">{{ friendly(e.evidence_type) }}</span>{% endfor %}</p>
+      {% else %}
+      <p class="muted" style="font-size:14px">No documents uploaded yet.</p>
+      {% endif %}
+    </div>
+
+    {% if blockers %}
+    <div class="banner warn"><b>Blockers</b><ul>{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% if missing %}
+    <div class="banner warn"><b>Missing evidence</b><ul>{% for m in missing %}<li>{{ m.label }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <h2>Conversation</h2>
+    <div id="vacare-live-notice" class="vacare-live-notice" hidden>
+      <span class="vacare-live-notice-text">New update</span>
+      <button type="button" data-live-dismiss>Dismiss</button>
+    </div>
+    <div class="thread" id="vso-thread" data-live-claim="{{ claim.id }}"
+         data-initial-latest="{{ latest_message_id }}" data-count="{{ messages|length }}">
+      {% for msg in messages %}
+      <div class="thread-row {{ msg.author.value }}{% if msg|upload_notice %} thread-upload{% endif %}">
+        <div class="thread-meta">{{ msg.author.value|upper }} · {{ msg.created_at.strftime('%Y-%m-%d %H:%M') if msg.created_at else '' }}</div>
+        <div class="thread-body">{% if msg.author.value == 'system' %}<em>{{ msg|msg_vso }}</em>{% else %}{{ msg.body }}{% endif %}</div>
+      </div>
+      {% else %}
+      <p class="muted">No messages yet.</p>
+      {% endfor %}
+    </div>
+
+    <form method="post" action="/cases/{{ claim.id }}/message" class="msg-form">
+      <label for="body">Note to veteran</label>
+      <textarea name="body" id="body" rows="3" placeholder="Ask a clarifying question or explain next steps..." required></textarea>
+      <input type="hidden" name="reviewer_name" value="VSO">
+      <button type="submit">Send message</button>
+    </form>
+  </section>
+
+  <aside class="case-side">
+    <div class="card side-card">
+      <h3 style="margin-top:0">Before you approve</h3>
+      <ul class="filing-checklist">
+        {% for item in filing_checklist %}
+        <li class="{% if item.ok %}ok{% else %}warn{% endif %}">
+          <span class="check-icon">{% if item.ok %}✓{% else %}·{% endif %}</span>
+          <span>
+            <b>{{ item.label }}</b>
+            {% if item.missing_items %}
+            <ul class="filing-missing-list">
+              {% for name in item.missing_items %}
+              <li>{{ name }}</li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <br><span class="muted" style="font-size:12px">{{ item.detail }}</span>
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if not checklist_ready and not approved %}
+      <p class="muted" style="font-size:12px;margin:8px 0 0;color:var(--lock)">
+        Complete all items above before approving.
+      </p>
+      {% endif %}
+    </div>
+
+    <div class="card side-card">
+      <p class="score">Readiness {{ score }}%</p>
+      {% if approved %}
+      <p class="ok-badge">✓ Approved to file</p>
+      {% else %}
+      <form method="post" action="/cases/{{ claim.id }}/approve">
+        <input type="hidden" name="reviewer_name" value="VSO">
+        <label for="approve-note">Approval note</label>
+        <textarea name="note" id="approve-note" rows="2">Approved to file with VA.</textarea>
+        <button type="submit" class="btn-approve" {% if approval_blockers %}disabled title="Complete checklist first"{% endif %}>Approve to file</button>
+      </form>
+      {% if approval_blockers %}
+      <p class="muted" style="font-size:12px;margin:8px 0 0;color:var(--lock)">
+        Blocked: {{ approval_blockers|join(', ') }}
+      </p>
+      {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="card side-card">
+      <h3>Veteran view</h3>
+      <p class="muted" style="font-size:13px">Open the same claim on the veteran app (port 8000).</p>
+      <a href="{{ veteran_app }}/claim/{{ claim.id }}" target="_blank" rel="noopener" class="btn ghost" style="width:100%;text-align:center">Open veteran summary</a>
+      <a href="{{ veteran_app }}/claim/{{ claim.id }}/526ez" target="_blank" rel="noopener" class="btn ghost" style="width:100%;text-align:center;margin-top:8px">Download 526EZ</a>
+    </div>
+
+    <details class="card side-card">
+      <summary>Packet preview</summary>
+      <pre class="packet-pre">{{ packet_preview }}{% if packet_preview|length >= 4000 %}…{% endif %}</pre>
+    </details>
+  </aside>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% include "partials/live_client.html" %}
+<script>VacareLive.startCasePoll("{{ claim.id }}", "vso");</script>
+{% endblock %}
