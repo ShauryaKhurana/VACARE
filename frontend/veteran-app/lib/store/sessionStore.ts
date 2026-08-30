@@ -32,6 +32,8 @@ interface SessionState {
   submitClaim: () => void;
   /** Resets the claim/dig only -- keeps the same routing id ("account"), unlike clearSession. */
   restartClaim: () => void;
+  /** Simulates a returning veteran signing into an account that already exists -- skips onboarding and the dig entirely, landing directly on an already-active claim. */
+  signInReturningVeteran: (routingId: string) => void;
   clearSession: () => void;
 }
 
@@ -63,6 +65,13 @@ export const useSessionStore = create<SessionState>()(
       // ever engaged," which restarting the dig doesn't undo -- resetting it
       // would incorrectly hide the nav chrome for a clearly-returning user.
       restartClaim: () => set({ onboardingComplete: false, claimSubmitted: false }),
+      signInReturningVeteran: (routingId) =>
+        set({
+          routingId,
+          onboardingComplete: true,
+          conversationStarted: true,
+          claimSubmitted: true,
+        }),
       clearSession: () =>
         set({
           routingId: null,

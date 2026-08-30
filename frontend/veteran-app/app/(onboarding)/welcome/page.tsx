@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   IconShieldCheck,
@@ -86,6 +87,13 @@ export default function WelcomePage() {
           {card.cta}
           {!isLastCard && <IconArrowRight size={18} aria-hidden="true" />}
         </AccentButton>
+
+        <Link
+          href="/signin"
+          className="text-sm text-text-secondary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Already registered? Sign in
+        </Link>
       </div>
     </div>
   );

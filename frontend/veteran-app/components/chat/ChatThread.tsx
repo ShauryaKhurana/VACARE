@@ -321,7 +321,11 @@ export function ChatThread() {
                   </div>
                 )}
 
-                {showResumeBanner && (
+                {/* Its "pick up right where you left off, getting your claim
+                    ready" copy only makes sense pre-submission -- once a
+                    claim is with a VSO, the pinned header above already
+                    says so, and this would otherwise contradict it. */}
+                {showResumeBanner && !claimSubmitted && (
                   <ResumeBanner onDismiss={() => setShowResumeBanner(false)} />
                 )}
 
