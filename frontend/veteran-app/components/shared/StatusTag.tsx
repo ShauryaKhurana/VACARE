@@ -35,21 +35,37 @@ export function StatusTag({
   variant,
   label,
   className,
+  wrap = false,
 }: {
   variant: StatusVariant;
   label: string;
   className?: string;
+  /** Every existing caller uses this for a short, fixed-width badge (a
+   * status word, "12d left") where `whitespace-nowrap` + `shrink-0` is
+   * exactly right -- but a label that's a full sentence (a long evidence
+   * name) forced onto one unbreakable line just becomes as wide as the
+   * sentence, dragging its container past the viewport on narrow screens.
+   * `wrap` opts a specific call site out of the nowrap/shrink-0 pair
+   * without changing the default for the ~30 other places this renders a
+   * short badge. */
+  wrap?: boolean;
 }) {
   const { icon: Icon, classes } = VARIANT_CONFIG[variant];
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
+        wrap ? "text-left" : "shrink-0 whitespace-nowrap",
         classes,
         className,
       )}
     >
-      <Icon size={13} stroke={2} className="shrink-0" aria-hidden="true" />
+      <Icon
+        size={13}
+        stroke={2}
+        className={cn("shrink-0", wrap && "mt-0.5 self-start")}
+        aria-hidden="true"
+      />
       {label}
     </span>
   );

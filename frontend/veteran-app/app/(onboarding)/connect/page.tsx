@@ -9,15 +9,20 @@ import { VsoCard } from "@/components/you/VsoCard";
 import { AccentButton } from "@/components/shared/AccentButton";
 import { SignInCard } from "@/components/onboarding/SignInCard";
 import { PageTransition } from "@/components/shared/PageTransition";
-import { Spinner } from "@/components/shared/Spinner";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 
-type Step = "matching" | "connected" | "redirecting" | "sign-in";
+// Sign-in comes first: a claim must never be transmitted to a VSO before the
+// veteran has an account to trace it back to. "matching"/"connected" is
+// pacing after the real submission, not before it -- there's no
+// "redirecting" step left, since sign-in isn't a destination reached later
+// in the sequence anymore.
+type Step = "sign-in" | "matching" | "connected";
 
 export default function ConnectPage() {
   const router = useRouter();
   const routingId = useSessionStore((s) => s.routingId);
-  const [step, setStep] = useState<Step>("matching");
+  const submitClaim = useSessionStore((s) => s.submitClaim);
+  const [step, setStep] = useState<Step>("sign-in");
 
   const { data: claim } = useQuery({
     queryKey: ["claim", routingId],
@@ -26,31 +31,29 @@ export default function ConnectPage() {
   });
 
   useEffect(() => {
+    if (step !== "matching") return;
     const t = setTimeout(() => setStep("connected"), 900);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (step !== "redirecting") return;
-    const t = setTimeout(() => setStep("sign-in"), 900);
     return () => clearTimeout(t);
   }, [step]);
 
+  async function handleSignIn() {
+    if (!routingId) return;
+    // The actual transmission to the VSO, now gated behind sign-in: this is
+    // the first moment an identity exists to attach the claim to.
+    await apiClient.confirmClaimDraft(routingId);
+    submitClaim();
+    setStep("matching");
+  }
+
   let content: React.ReactNode;
 
-  if (step === "redirecting") {
-    content = (
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center md:max-w-2xl">
-        <Spinner label="Redirecting you to sign in" />
-        <p className="text-sm text-text-secondary">Redirecting you to sign in…</p>
-      </div>
-    );
-  } else if (step === "sign-in") {
+  if (step === "sign-in") {
     content = (
       <SignInCard
-        heading="Sign in to save your progress"
+        heading="Sign in to send your claim to your VSO"
         description="VA.gov verifies your identity through Login.gov or ID.me before linking a claim to your account -- this preview simulates that step, so nothing here is a real sign-in."
-        onSubmit={() => router.push("/claim")}
+        submitLabel="Sign in & send to my VSO"
+        onSubmit={() => void handleSignIn()}
       />
     );
   } else {
@@ -80,7 +83,7 @@ export default function ConnectPage() {
             </div>
             <AccentButton
               type="button"
-              onClick={() => setStep("redirecting")}
+              onClick={() => router.push("/claim")}
               className="w-full max-w-sm md:max-w-md"
             >
               Continue to my claim

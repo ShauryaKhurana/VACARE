@@ -6,6 +6,14 @@ import { IconLockSquareRounded } from "@tabler/icons-react";
 import { AccentButton } from "@/components/shared/AccentButton";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { Spinner } from "@/components/shared/Spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { VSO_ORGANIZATIONS } from "@/lib/api/vso/organizations";
 import { useVsoStore } from "@/lib/store/vsoStore";
 
 type Step = "form" | "signing-in";
@@ -63,6 +71,10 @@ export default function VsoSignInPage() {
             className="flex w-full max-w-sm flex-col gap-3 text-left md:max-w-md"
             onSubmit={(e) => {
               e.preventDefault();
+              // The name/accreditation-id inputs are natively `required`;
+              // organization isn't a native input anymore (it's the Select
+              // below), so its required-ness needs this explicit guard.
+              if (!organization) return;
               setStep("signing-in");
             }}
           >
@@ -82,15 +94,22 @@ export default function VsoSignInPage() {
             <label htmlFor="vso-org" className="text-sm font-medium text-text-primary">
               Organization
             </label>
-            <input
-              id="vso-org"
-              type="text"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              placeholder="Disabled American Veterans"
-              required
-              className="rounded-control border border-border bg-surface px-3 py-2.5 text-base text-text-primary outline-none focus-visible:border-accent"
-            />
+            {/* A fixed catalog, not free text: an accredited rep's
+                organization is one of a known, finite set (VSO_ORGANIZATIONS),
+                so a dropdown matches the real-world constraint better than an
+                open field a typo could quietly corrupt. */}
+            <Select value={organization} onValueChange={(value) => setOrganization(value ?? "")}>
+              <SelectTrigger id="vso-org" aria-label="Organization" className="w-full text-base">
+                <SelectValue placeholder="Select your organization" />
+              </SelectTrigger>
+              <SelectContent>
+                {VSO_ORGANIZATIONS.map((org) => (
+                  <SelectItem key={org} value={org}>
+                    {org}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <label htmlFor="vso-accred" className="text-sm font-medium text-text-primary">
               Accreditation ID
@@ -109,7 +128,7 @@ export default function VsoSignInPage() {
               Only used to label your reviews in this preview -- not shared with the VA and not
               stored anywhere beyond this browser.
             </p>
-            <AccentButton type="submit" className="mt-1 w-full">
+            <AccentButton type="submit" className="mt-1 w-full" disabled={!organization}>
               Sign in
             </AccentButton>
           </form>

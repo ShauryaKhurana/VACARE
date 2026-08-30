@@ -74,7 +74,11 @@ test("/vso renders the triage-lane inbox without a page error, once signed in", 
   await signInAsVso(page);
   await page.goto("/vso");
   await expect(page.getByRole("heading", { name: "Caseload" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Needs you")).toBeVisible();
+  // Below md the inbox renders lanes as stacked cards instead of the table
+  // (app/(vso)/vso/page.tsx); both markups exist in the DOM at once (one
+  // hidden via md:hidden/hidden md:block), so the same ":visible"
+  // disambiguation the ROUTES loop above uses is needed here too.
+  await expect(page.getByText("Needs you").and(page.locator(":visible")).first()).toBeVisible();
 
   expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toHaveLength(0);
 });

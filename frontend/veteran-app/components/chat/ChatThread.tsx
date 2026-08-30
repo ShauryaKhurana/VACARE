@@ -21,7 +21,7 @@ import { EligibilityCard } from "@/components/chat/EligibilityCard";
 import { QuickReplies } from "@/components/chat/QuickReplies";
 import { StatementBuilderCard } from "@/components/chat/StatementBuilderCard";
 import { ResumeBanner } from "@/components/chat/ResumeBanner";
-import { ChatInputBar } from "@/components/chat/ChatInputBar";
+import { ChatInputBar, type ChatInputBarHandle } from "@/components/chat/ChatInputBar";
 import { RestartClaimDialog } from "@/components/chat/RestartClaimDialog";
 import { StepTracker } from "@/components/shared/StepTracker";
 import { AccentButton } from "@/components/shared/AccentButton";
@@ -148,6 +148,7 @@ export function ChatThread() {
   const initialized = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<ChatInputBarHandle>(null);
 
   useEffect(() => {
     if (!routingId) startSession();
@@ -396,7 +397,12 @@ export function ChatThread() {
                         key={target}
                         type="button"
                         disabled={loading}
-                        onClick={() => void sendRelayMessage(`I need to update: ${target}`)}
+                        onClick={() => {
+                          // Prefill, don't send -- the veteran still has to
+                          // review the wording and press send themselves.
+                          inputRef.current?.setDraft(`I need to update: ${target}`);
+                          inputRef.current?.focus();
+                        }}
                         className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text-primary transition-colors hover:border-accent hover:text-accent disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       >
                         Edit {target}
@@ -566,6 +572,7 @@ export function ChatThread() {
         )}
       </div>
       <ChatInputBar
+        ref={inputRef}
         onSend={(text) => void (claimSubmitted ? sendRelayMessage(text) : advance(text))}
         onAttach={async (file, fileName) => {
           if (!routingId) return;
