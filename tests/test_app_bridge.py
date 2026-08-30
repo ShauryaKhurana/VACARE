@@ -203,3 +203,44 @@ def test_no_name_or_identifier_leaks_into_the_routing_id():
     payload = app_bridge.claim_to_app_claim(claim)
     assert claim.veteran.last_name.lower() not in payload["routingId"].lower()
     assert claim.veteran.first_name.lower() not in payload["routingId"].lower()
+
+
+# --- quick replies ----------------------------------------------------------
+
+
+def test_a_question_with_choices_sends_them_as_quick_replies():
+    """Without these the veteran is told to tap a button that isn't rendered."""
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    session.story_done = True
+    session.identity_done = True
+    session.contact_done = True
+    session.claim.veteran.first_name = "Dana"
+    session.claim.veteran.last_name = "Reyes"
+    session.claim.veteran.dob = date(1988, 3, 12)
+    session.claim.veteran.service_start = date(2007, 6, 1)
+
+    question = intake_chat.next_question(session)
+    assert question.options, "this step is choice-based"
+
+    replies = [m for m in app_bridge.chat_messages(session) if m["type"] == "quick-replies"]
+    assert replies, "choices must reach the frontend"
+    assert replies[0]["options"] == list(question.options)
+
+
+def test_an_open_question_sends_no_quick_replies():
+    from src import intake_chat
+
+    session = intake_chat.new_session()      # opening story question is open-ended
+    assert not [m for m in app_bridge.chat_messages(session) if m["type"] == "quick-replies"]
+
+
+def test_a_finished_conversation_offers_no_choices():
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    for field in vars(session):
+        if isinstance(getattr(session, field), bool):
+            setattr(session, field, True)
+    assert not [m for m in app_bridge.chat_messages(session) if m["type"] == "quick-replies"]

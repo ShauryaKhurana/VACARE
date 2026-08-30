@@ -602,13 +602,35 @@ def apply_answer(session: Session, text: str) -> str:
         return "I still need the date on the decision letter (YYYY-MM-DD)."
 
     if question.slot == Slot.RECORDS:
-        lowered = answer.lower()
-        if lowered in {"done", "done uploading", "skip", "skip for now"} or "done upload" in lowered or "skip" in lowered:
+        lowered = answer.lower().strip()
+        skipping = "skip" in lowered or "later" in lowered
+        # Anything that plainly means "nothing more" finishes this step. The
+        # veteran should not have to guess a magic word to move on, and on a
+        # client with no buttons typing is the only way through.
+        finished = (
+            skipping
+            or "done" in lowered
+            or "no more" in lowered
+            or "nothing" in lowered
+            or "that's all" in lowered
+            or "thats all" in lowered
+            or "that's everything" in lowered
+            or "thats everything" in lowered
+            or "finished" in lowered
+            or "all set" in lowered
+            or "next" in lowered
+            or "continue" in lowered
+            or lowered in {"no", "nope", "n", "none", "no thanks", "ready"}
+        )
+        if finished:
             session.records_done = True
-            if "skip" in lowered:
+            if skipping:
                 return "No problem — you can add records later."
             return "Great — let's wrap up."
-        return "Upload a file, or tap Done uploading / Skip for now."
+        return (
+            "Upload a file if you have one. If you're finished, just say "
+            "\"done\" and we'll move on."
+        )
 
     if question.slot == Slot.ITF:
         lowered = answer.lower()

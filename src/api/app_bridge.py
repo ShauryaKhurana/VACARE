@@ -391,13 +391,23 @@ def chat_messages(session, since: int = 0) -> List[Dict[str, Any]]:
                 "type": "eligibility-card",
                 "conditions": claim_conditions,
             })
-    elif question.accepts_upload:
-        out.append({
-            "id": f"{session.claim.id}-{question.slot.value}-u",
-            "type": "document-upload",
-            "prompt": question.doc_tip or question.help_text or question.text,
-            "documentType": _SLOT_TO_DOC_TYPE.get(question.slot.value, "other"),
-        })
+    else:
+        if question.accepts_upload:
+            out.append({
+                "id": f"{session.claim.id}-{question.slot.value}-u",
+                "type": "document-upload",
+                "prompt": question.doc_tip or question.help_text or question.text,
+                "documentType": _SLOT_TO_DOC_TYPE.get(question.slot.value, "other"),
+            })
+        if question.options:
+            # Some steps only accept one of a fixed set of answers. Without
+            # these the veteran is told to "tap Done uploading" with no button
+            # on screen, and the conversation cannot move on.
+            out.append({
+                "id": f"{session.claim.id}-{question.slot.value}-q",
+                "type": "quick-replies",
+                "options": list(question.options),
+            })
 
     return out
 

@@ -153,3 +153,54 @@ def test_the_same_file_renamed_is_recognized_as_a_repeat(monkeypatch, tmp_path):
     again = document_ingest.ingest_document(claim, "dd214-copy.pdf", b"same-bytes",
                                             preloaded_payload=payload)
     assert again.seen_before
+
+
+# --- the records step must be escapable -------------------------------------
+
+
+def records_session():
+    """A session parked on the 'upload your records' step."""
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    session.story_done = True
+    session.identity_done = True
+    session.contact_done = True
+    session.rating_done = True
+    session.intent_done = True
+    veteran = session.claim.veteran
+    veteran.first_name, veteran.last_name = "Dana", "Reyes"
+    veteran.dob = date(1988, 3, 12)
+    veteran.service_start = date(2007, 6, 1)
+    assert intake_chat.next_question(session).slot == intake_chat.Slot.RECORDS
+    return session
+
+
+@pytest.mark.parametrize("answer", [
+    "done", "Done uploading", "skip", "Skip for now", "no", "nope", "none",
+    "nothing else", "that's all", "that's everything", "no more", "all set",
+    "finished", "next", "continue", "ready",
+])
+def test_ordinary_ways_of_saying_nothing_more_finish_the_step(answer):
+    """A veteran should not have to guess a magic word to move on."""
+    from src import intake_chat
+
+    session = records_session()
+    intake_chat.apply_answer(session, answer)
+    assert session.records_done, f"{answer!r} left the veteran stuck"
+
+
+def test_an_unrelated_answer_keeps_the_step_open_with_a_usable_hint():
+    from src import intake_chat
+
+    session = records_session()
+    receipt = intake_chat.apply_answer(session, "what does a nexus letter cost")
+    assert not session.records_done
+    assert "done" in receipt.lower()          # tells them how to move on
+
+
+def test_the_step_advertises_a_way_out():
+    from src import intake_chat
+
+    session = records_session()
+    assert intake_chat.next_question(session).options, "no options means no buttons"

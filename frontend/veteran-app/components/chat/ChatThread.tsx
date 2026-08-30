@@ -18,6 +18,7 @@ import { MessageBubble } from "@/components/chat/MessageBubble";
 import { DocumentUploadCard } from "@/components/chat/DocumentUploadCard";
 import { ConfirmationCard } from "@/components/chat/ConfirmationCard";
 import { EligibilityCard } from "@/components/chat/EligibilityCard";
+import { QuickReplies } from "@/components/chat/QuickReplies";
 import { StatementBuilderCard } from "@/components/chat/StatementBuilderCard";
 import { ResumeBanner } from "@/components/chat/ResumeBanner";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
@@ -369,6 +370,14 @@ export function ChatThread() {
                             setStepsDone((s) => Math.max(s, 2));
                             void advance();
                           }}
+                        />
+                      );
+                    case "quick-replies":
+                      return (
+                        <QuickReplies
+                          key={message.id}
+                          options={message.options}
+                          onSelect={(option) => void advance(option)}
                         />
                       );
                     case "statement-builder":

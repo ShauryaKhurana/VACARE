@@ -112,4 +112,7 @@ export type ChatMessage =
   | { id: string; type: "document-upload"; prompt: string; documentType: "dd214" | "medical-record" | "other" }
   | { id: string; type: "confirmation-card"; fields: ConfirmationField[] }
   | { id: string; type: "eligibility-card"; conditions: Condition[] }
-  | { id: string; type: "statement-builder"; prompt: string };
+  | { id: string; type: "statement-builder"; prompt: string }
+  /** Fixed choices for the current question, rendered as tappable answers.
+   *  Without this, choice-only steps (e.g. "Done uploading") are unanswerable. */
+  | { id: string; type: "quick-replies"; options: string[] };
