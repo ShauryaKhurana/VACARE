@@ -8,6 +8,7 @@ at MVP scale (one veteran working on one claim at a time).
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from src.models import (
     CaseMessage,
     Claim,
     LaneContext,
+    MailingAddress,
     Condition,
     EvidenceItem,
     MessageAuthor,
@@ -44,6 +46,21 @@ def _parse_message_timestamp(raw: str) -> datetime:
     if "T" in raw:
         return datetime.fromisoformat(raw)
     return datetime.fromisoformat(f"{raw}T00:00:00")
+
+
+def _veterans_table_sql() -> str:
+    """The canonical `veterans` definition, read from the schema file.
+
+    The legacy-migration rebuild used to hold its own copy, so every column
+    added later was silently dropped for anyone upgrading an old database.
+    """
+    schema = SCHEMA_PATH.read_text()
+    match = re.search(
+        r"CREATE TABLE IF NOT EXISTS veterans \(.*?\n\);", schema, re.S
+    )
+    if not match:
+        raise RuntimeError("veterans table not found in schema/va_claim_schema.sql")
+    return match.group(0)
 
 
 def _load_dob(value: Optional[str]) -> Optional[date]:
@@ -75,9 +92,15 @@ class ClaimStore:
             self.connection.execute("ALTER TABLE claims ADD COLUMN context_json TEXT")
         veteran_columns = {row["name"] for row in
                            self.connection.execute("PRAGMA table_info(veterans)")}
-        if veteran_columns and "middle_name" not in veteran_columns:
-            self.connection.execute("ALTER TABLE veterans ADD COLUMN middle_name TEXT")
         self._relax_veteran_dob()
+
+        veteran_columns = {row["name"] for row in
+                           self.connection.execute("PRAGMA table_info(veterans)")}
+        for column in ("middle_name TEXT", "ssn TEXT", "va_file_number TEXT",
+                       "address_json TEXT"):
+            name = column.split()[0]
+            if veteran_columns and name not in veteran_columns:
+                self.connection.execute(f"ALTER TABLE veterans ADD COLUMN {column}")
         self._add_missing_tables()
 
     def _relax_veteran_dob(self) -> None:
@@ -103,19 +126,7 @@ class ClaimStore:
             PRAGMA foreign_keys = OFF;
             PRAGMA legacy_alter_table = ON;
             ALTER TABLE veterans RENAME TO veterans_old;
-            CREATE TABLE veterans (
-                id TEXT PRIMARY KEY,
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
-                middle_name TEXT,
-                dob TEXT,
-                email TEXT,
-                phone TEXT,
-                branch TEXT,
-                service_start TEXT,
-                service_end TEXT,
-                discharge_type TEXT NOT NULL DEFAULT 'unknown'
-            );
+            {_veterans_table_sql()}
             INSERT INTO veterans ({names}) SELECT {names} FROM veterans_old;
             DROP TABLE veterans_old;
             PRAGMA legacy_alter_table = OFF;
@@ -191,14 +202,17 @@ class ClaimStore:
         cur.execute(
             """
             INSERT INTO veterans (id, first_name, last_name, middle_name, dob, email, phone,
-                                  branch, service_start, service_end, discharge_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  branch, service_start, service_end, discharge_type,
+                                  ssn, va_file_number, address_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 first_name=excluded.first_name, last_name=excluded.last_name,
                 middle_name=excluded.middle_name,
                 dob=excluded.dob, email=excluded.email, phone=excluded.phone,
                 branch=excluded.branch, service_start=excluded.service_start,
-                service_end=excluded.service_end, discharge_type=excluded.discharge_type
+                service_end=excluded.service_end, discharge_type=excluded.discharge_type,
+                ssn=excluded.ssn, va_file_number=excluded.va_file_number,
+                address_json=excluded.address_json
             """,
             (
                 veteran.id, veteran.first_name, veteran.last_name, veteran.middle_name,
@@ -207,6 +221,8 @@ class ClaimStore:
                 veteran.branch.value if veteran.branch else None,
                 _iso(veteran.service_start), _iso(veteran.service_end),
                 veteran.discharge_type.value,
+                veteran.ssn, veteran.va_file_number,
+                veteran.address.model_dump_json(),
             ),
         )
 
@@ -355,6 +371,9 @@ class ClaimStore:
 
         veteran_data = {k: veteran_row[k] for k in veteran_row.keys()}
         veteran_data["dob"] = _load_dob(veteran_data.get("dob"))
+        address_json = veteran_data.pop("address_json", None)
+        if address_json:
+            veteran_data["address"] = MailingAddress.model_validate_json(address_json)
         for date_field in ("service_start", "service_end"):
             if veteran_data.get(date_field):
                 veteran_data[date_field] = date.fromisoformat(veteran_data[date_field])

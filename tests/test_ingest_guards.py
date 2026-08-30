@@ -166,6 +166,8 @@ def records_session():
     session.story_done = True
     session.identity_done = True
     session.contact_done = True
+    session.address_done = True
+    session.ssn_done = True
     session.rating_done = True
     session.intent_done = True
     veteran = session.claim.veteran
@@ -204,3 +206,90 @@ def test_the_step_advertises_a_way_out():
 
     session = records_session()
     assert intake_chat.next_question(session).options, "no options means no buttons"
+
+
+# --- address and SSN collection ---------------------------------------------
+
+
+@pytest.mark.parametrize("text,street,city,state,zip_code", [
+    ("3114 Elm Street, Tucson, AZ 85701", "3114 Elm Street", "Tucson", "AZ", "85701"),
+    ("12 Oak Ave, Apt 3, Denver, CO 80202-1234", "12 Oak Ave, Apt 3", "Denver", "CO", "802021234"),
+    ("PO Box 12, Reno, NV 89501", "PO Box 12", "Reno", "NV", "89501"),
+])
+def test_a_one_line_address_is_parsed(text, street, city, state, zip_code):
+    from src.intake_chat import _parse_address
+
+    parsed = _parse_address(text)
+    assert parsed is not None
+    assert (parsed.street, parsed.city, parsed.state, parsed.zip_code) == (
+        street, city, state, zip_code)
+
+
+@pytest.mark.parametrize("text", ["nope", "Tucson AZ 85701", "just a street name", ""])
+def test_an_unusable_address_is_rejected_rather_than_half_saved(text):
+    from src.intake_chat import _parse_address
+
+    assert _parse_address(text) is None
+
+
+def identity_session():
+    from src import intake_chat
+
+    session = intake_chat.new_session()
+    session.story_done = True
+    session.identity_done = True
+    session.contact_done = True
+    veteran = session.claim.veteran
+    veteran.first_name, veteran.last_name = "Marcus", "Rivera"
+    veteran.dob = date(1990, 7, 22)
+    veteran.service_start = date(2009, 9, 14)
+    veteran.service_end = date(2016, 11, 3)
+    return session
+
+
+def test_the_intake_asks_for_an_address_then_an_ssn():
+    from src import intake_chat
+
+    session = identity_session()
+    assert intake_chat.next_question(session).slot == intake_chat.Slot.ADDRESS
+
+    intake_chat.apply_answer(session, "3114 Elm Street, Tucson, AZ 85701")
+    assert session.claim.veteran.address.is_complete
+    assert intake_chat.next_question(session).slot == intake_chat.Slot.SSN
+
+    intake_chat.apply_answer(session, "000-00-0000")
+    assert session.claim.veteran.ssn == "000000000"
+
+
+def test_the_ssn_can_be_skipped_without_blocking_the_intake():
+    from src import intake_chat
+
+    session = identity_session()
+    intake_chat.apply_answer(session, "3114 Elm Street, Tucson, AZ 85701")
+    receipt = intake_chat.apply_answer(session, "Skip — I'll write it in myself")
+
+    assert session.ssn_done and session.claim.veteran.ssn is None
+    assert "write in" in receipt
+    assert intake_chat.next_question(session).slot != intake_chat.Slot.SSN
+
+
+def test_a_receipt_never_echoes_the_whole_ssn_back():
+    from src import intake_chat
+
+    session = identity_session()
+    intake_chat.apply_answer(session, "3114 Elm Street, Tucson, AZ 85701")
+    receipt = intake_chat.apply_answer(session, "123-45-6789")
+
+    assert "123456789" not in receipt and "123-45-6789" not in receipt
+    assert "6789" in receipt        # last four only, so they can check it
+
+
+def test_a_malformed_ssn_is_refused():
+    from src import intake_chat
+
+    session = identity_session()
+    intake_chat.apply_answer(session, "3114 Elm Street, Tucson, AZ 85701")
+    receipt = intake_chat.apply_answer(session, "12345")
+
+    assert not session.ssn_done
+    assert "9 digits" in receipt

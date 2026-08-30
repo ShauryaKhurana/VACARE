@@ -56,14 +56,42 @@ def test_empty_values_are_not_written():
     assert f"{HEADER}Email_Address_Optional[0]" not in values
 
 
-def test_nothing_is_invented_for_data_we_never_collect():
-    """The SSN and address boxes must stay blank, and be reported as gaps."""
-    values = build_field_values(build_sample_claim())
+def test_nothing_is_invented_for_data_we_do_not_have():
+    """Blank because it was never given -- not because we withhold it."""
+    claim = build_sample_claim()          # no SSN or address collected
+    values = build_field_values(claim)
     assert not any("SocialSecurity" in name for name in values)
     assert not any("MailingAddress" in name for name in values)
 
-    gaps = " ".join(missing_for_form(build_sample_claim()))
+    gaps = " ".join(missing_for_form(claim))
     assert "Social Security" in gaps and "Mailing address" in gaps
+
+
+def test_everything_we_have_is_filled_in():
+    """Given an SSN and address, every box that takes them is populated."""
+    from src.models import MailingAddress
+
+    claim = build_sample_claim()
+    claim.veteran.ssn = "000-00-0000"
+    claim.veteran.address = MailingAddress(
+        street="3114 Elm Street", city="Tucson", state="AZ", zip_code="857011234",
+    )
+    values = build_field_values(claim)
+
+    # The form repeats the SSN in every page header, so all of them count.
+    first_three = [n for n in values if "SocialSecurityNumber_FirstThreeNumbers" in n]
+    assert len(first_three) >= 7, "an SSN box was left blank on some page"
+    assert all(values[name] == "000" for name in first_three)
+
+    assert values[f"{HEADER}CurrentMailingAddress_NumberAndStreet[0]"] == "3114 Elm Street"
+    assert values[f"{HEADER}CurrentMailingAddress_City[0]"] == "Tucson"
+    assert values[f"{HEADER}CurrentMailingAddress_StateOrProvince[0]"] == "AZ"
+    assert values[f"{HEADER}CurrentMailingAddress_ZIPOrPostalCode_FirstFiveNumbers[0]"] == "85701"
+    assert values[f"{HEADER}CurrentMailingAddress_ZIPOrPostalCode_LastFourNumbers[0]"] == "1234"
+
+    # Only a signature is left, because a form must be signed by a person.
+    gaps = missing_for_form(claim)
+    assert len(gaps) == 1 and "Signature" in gaps[0]
 
 
 def test_more_conditions_than_rows_is_reported():

@@ -248,6 +248,9 @@ def established_identity(session):
     session.story_done = True
     session.identity_done = True
     session.contact_done = True
+    # The dig also collects a mailing address and SSN before rating.
+    session.address_done = True
+    session.ssn_done = True
     veteran = session.claim.veteran
     veteran.first_name, veteran.last_name = "Dana", "Reyes"
     veteran.dob = date(1988, 3, 12)

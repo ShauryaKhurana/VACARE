@@ -196,6 +196,9 @@ def test_rating_quick_pick_none_advances_chat(client, monkeypatch):
     session.claim.veteran.service_start = date(2007, 6, 1)
     session.claim.veteran.service_end = date(2013, 8, 30)
     session.contact_done = True
+    # The dig also collects a mailing address and SSN before rating.
+    session.address_done = True
+    session.ssn_done = True
     session.claim.veteran.phone = "555-014-2277"
     session.transcript.clear()
     session.say("bot", "Does the VA pay you for any disability right now?")
@@ -222,6 +225,9 @@ def test_rating_quick_pick_percent_multipart(client, monkeypatch):
     session.claim.veteran.service_start = date(2007, 6, 1)
     session.claim.veteran.service_end = date(2013, 8, 30)
     session.contact_done = True
+    # The dig also collects a mailing address and SSN before rating.
+    session.address_done = True
+    session.ssn_done = True
     session.claim.veteran.email = "dana@example.com"
     session.transcript.clear()
     session.say("bot", "Does the VA pay you for any disability right now?")

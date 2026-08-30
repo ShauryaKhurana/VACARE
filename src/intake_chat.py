@@ -33,6 +33,7 @@ from src.models import (
     ClaimStatus,
     DischargeType,
     EvidenceType,
+    MailingAddress,
     Veteran,
 )
 
@@ -53,6 +54,8 @@ class Slot(str, Enum):
     DOB = "dob"
     SERVICE_DATES = "service_dates"
     CONTACT = "contact"
+    ADDRESS = "address"
+    SSN = "ssn"
     RATING = "rating"
     INTENT = "intent"
     DECISION = "decision"
@@ -87,6 +90,8 @@ class Session:
 
     claim: Claim
     transcript: List[Message] = field(default_factory=list)
+    address_done: bool = False
+    ssn_done: bool = False
     story_done: bool = False
     identity_done: bool = False
     contact_done: bool = False
@@ -391,6 +396,29 @@ def next_question(session: Session) -> Question:
                 help_text="Example: 555-123-4567, you@email.com",
             )
 
+    if not session.address_done:
+        if claim.veteran.address.is_complete:
+            session.address_done = True
+        else:
+            return Question(
+                slot=Slot.ADDRESS,
+                text="What's your mailing address? The VA sends letters there.",
+                help_text="Street, city, state and ZIP. Example: "
+                          "3114 Elm Street, Tucson, AZ 85701",
+            )
+
+    if not session.ssn_done:
+        if claim.veteran.ssn:
+            session.ssn_done = True
+        else:
+            return Question(
+                slot=Slot.SSN,
+                text="Last identity question: your Social Security number.",
+                help_text="The VA form asks for it on every page. "
+                          "Choose 'Skip' if you'd rather write it in yourself.",
+                options=["Skip — I'll write it in myself"],
+            )
+
     if not session.rating_done:
         return Question(
             slot=Slot.RATING,
@@ -557,6 +585,26 @@ def apply_answer(session: Session, text: str) -> str:
                 parts.append(f"email {claim.veteran.email}")
             return "Saved your " + " and ".join(parts) + "."
         return "I need at least a phone number or email. Example: 555-123-4567, you@email.com"
+
+    if question.slot == Slot.ADDRESS:
+        parsed = _parse_address(answer)
+        if parsed is None:
+            return ("I need a street, city, state and ZIP. Example: "
+                    "3114 Elm Street, Tucson, AZ 85701")
+        claim.veteran.address = parsed
+        session.address_done = True
+        return f"Saved {parsed.one_line()}."
+
+    if question.slot == Slot.SSN:
+        if "skip" in answer.lower():
+            session.ssn_done = True
+            return "No problem — that box is left for you to write in."
+        digits = "".join(character for character in answer if character.isdigit())
+        if len(digits) != 9:
+            return "A Social Security number has 9 digits. Or choose Skip."
+        claim.veteran.ssn = digits
+        session.ssn_done = True
+        return f"Saved. It'll show on the form as xxx-xx-{digits[5:]}."
 
     if question.slot == Slot.RATING:
         session.rating_done = True
@@ -734,6 +782,33 @@ def submit_readiness(claim: Claim) -> dict:
         "ready": len(missing) == 0,
         "missing": missing,
     }
+
+
+STATE_ZIP = re.compile(r"\b([A-Za-z]{2})\.?\s*,?\s*(\d{5})(?:-?(\d{4}))?\s*$")
+
+
+def _parse_address(text: str) -> Optional[MailingAddress]:
+    """Read a one-line address. Anchored on the state and ZIP at the end,
+    which is the reliable part; everything before is street then city."""
+    cleaned = " ".join(text.split())
+    match = STATE_ZIP.search(cleaned)
+    if not match:
+        return None
+
+    state, zip5, zip4 = match.group(1).upper(), match.group(2), match.group(3)
+    head = cleaned[: match.start()].strip().rstrip(",").strip()
+    parts = [part.strip() for part in head.split(",") if part.strip()]
+    if len(parts) < 2:
+        return None
+
+    street, city = ", ".join(parts[:-1]), parts[-1]
+    try:
+        return MailingAddress(
+            street=street, city=city, state=state,
+            zip_code=zip5 + (zip4 or ""),
+        )
+    except ValidationError:
+        return None
 
 
 def _safe_iso(text: str) -> bool:

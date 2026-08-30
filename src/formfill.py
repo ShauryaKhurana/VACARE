@@ -91,7 +91,30 @@ def _service_link_sentence(claim: Claim, condition) -> str:
     return " ".join(pieces).strip()
 
 
-def build_field_values(claim: Claim) -> Dict[str, str]:
+def _ssn_fields(reader_fields, ssn: str) -> Dict[str, str]:
+    """Every SSN box on the form, not just the first.
+
+    The 526EZ repeats the number in each page header so loose pages can be
+    matched back to a claim; leaving the other six blank produces a form VA
+    treats as incomplete.
+    """
+    values: Dict[str, str] = {}
+    for name in reader_fields:
+        if "SocialSecurityNumber_FirstThreeNumbers" in name:
+            values[name] = ssn[:3]
+        elif "SocialSecurityNumber_SecondTwoNumbers" in name:
+            values[name] = ssn[3:5]
+        elif "SocialSecurityNumber_LastFourNumbers" in name:
+            values[name] = ssn[5:]
+    return values
+
+
+def template_field_names(template: Optional[Path] = None) -> List[str]:
+    reader = PdfReader(str(ensure_template(template or TEMPLATE_PATH)))
+    return [name for name, spec in (reader.get_fields() or {}).items() if spec.get("/FT")]
+
+
+def build_field_values(claim: Claim, field_names: Optional[List[str]] = None) -> Dict[str, str]:
     """Every field we can fill from the claim, as {pdf_field_name: value}."""
     veteran = claim.veteran
     values: Dict[str, str] = {}
@@ -139,6 +162,30 @@ def build_field_values(claim: Claim) -> Dict[str, str]:
         if event:
             values[f"{ROWS}Specify_Type_Of_Exposure_Event_Or_Injury[{index}]"] = event.title
 
+    if veteran.ssn:
+        values.update(_ssn_fields(field_names or template_field_names(), veteran.ssn))
+
+    if veteran.va_file_number:
+        values[f"{HEADER}VA_File_Number[0]"] = veteran.va_file_number
+
+    address = veteran.address
+    if address.street:
+        values[f"{HEADER}CurrentMailingAddress_NumberAndStreet[0]"] = address.street
+    if address.unit:
+        values[f"{HEADER}CurrentMailingAddress_ApartmentOrUnitNumber[0]"] = address.unit
+    if address.city:
+        values[f"{HEADER}CurrentMailingAddress_City[0]"] = address.city
+    if address.state:
+        values[f"{HEADER}CurrentMailingAddress_StateOrProvince[0]"] = address.state
+    if address.country and address.street:
+        # Only stamp the country once there is an address to belong to;
+        # the default would otherwise fill a box nobody told us about.
+        values[f"{HEADER}CurrentMailingAddress_Country[0]"] = address.country
+    if address.zip_code:
+        values[f"{HEADER}CurrentMailingAddress_ZIPOrPostalCode_FirstFiveNumbers[0]"] = address.zip_code[:5]
+        if len(address.zip_code) == 9:
+            values[f"{HEADER}CurrentMailingAddress_ZIPOrPostalCode_LastFourNumbers[0]"] = address.zip_code[5:]
+
     signed = _split_date(date.today())
     values["F[0].#subform[12].Date_Signed_Month[0]"] = signed["month"]
     values["F[0].#subform[12].Date_Signed_Day[0]"] = signed["day"]
@@ -152,9 +199,11 @@ def missing_for_form(claim: Claim) -> List[str]:
     gaps: List[str] = []
     veteran = claim.veteran
 
-    gaps.append("Social Security number (we deliberately do not store one)")
-    gaps.append("Mailing address")
-    gaps.append("Signature and date (the form must be signed by hand or digitally)")
+    if not veteran.ssn:
+        gaps.append("Social Security number")
+    if not veteran.address.is_complete:
+        gaps.append("Mailing address")
+    gaps.append("Signature (the form must be signed by hand or digitally)")
 
     if not veteran.service_start:
         gaps.append("Date entered active service")
@@ -187,7 +236,7 @@ def fill_526ez(claim: Claim, output_path: Path, template: Optional[Path] = None)
     # Without this, some viewers show the values only after the field is clicked.
     writer.set_need_appearances_writer(True)
 
-    values = build_field_values(claim)
+    values = build_field_values(claim, field_names=list((reader.get_fields() or {}).keys()))
     for page in writer.pages:
         writer.update_page_form_field_values(page, values)
 

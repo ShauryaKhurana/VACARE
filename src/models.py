@@ -110,6 +110,35 @@ class CaseMessage(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class MailingAddress(BaseModel):
+    """Where VA sends letters. Every box on the 526EZ header page."""
+
+    street: Optional[str] = None
+    unit: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: str = "USA"
+
+    @field_validator("zip_code")
+    @classmethod
+    def zip_must_look_like_one(cls, value: Optional[str]) -> Optional[str]:
+        if not value or not value.strip():
+            return None
+        digits = "".join(c for c in value if c.isdigit())
+        if len(digits) not in (5, 9):
+            raise ValueError("ZIP code needs 5 digits, or 9 for ZIP+4")
+        return digits
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.street and self.city and self.state and self.zip_code)
+
+    def one_line(self) -> str:
+        parts = [self.street, self.unit, self.city, self.state, self.zip_code]
+        return ", ".join(part for part in parts if part)
+
+
 class Veteran(BaseModel):
     """Basic identity and service history for the person filing."""
 
@@ -126,6 +155,23 @@ class Veteran(BaseModel):
     service_start: Optional[date] = None
     service_end: Optional[date] = None
     discharge_type: DischargeType = DischargeType.UNKNOWN
+    # The 526EZ asks for these on every page header. Stored so the form can be
+    # filled completely rather than handed over with gaps.
+    ssn: Optional[str] = None
+    va_file_number: Optional[str] = None
+    address: MailingAddress = Field(default_factory=MailingAddress)
+
+    @field_validator("ssn")
+    @classmethod
+    def ssn_must_be_nine_digits(cls, value: Optional[str]) -> Optional[str]:
+        """Stored as bare digits. Length only - we do not police SSA issuance
+        rules, so a documented specimen number still works for testing."""
+        if not value or not value.strip():
+            return None
+        digits = "".join(character for character in value if character.isdigit())
+        if len(digits) != 9:
+            raise ValueError("a Social Security number has 9 digits")
+        return digits
 
     @field_validator("first_name", "last_name")
     @classmethod

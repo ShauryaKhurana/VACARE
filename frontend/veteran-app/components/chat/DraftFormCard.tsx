@@ -35,8 +35,9 @@ export function DraftFormCard({ routingId }: { routingId: string }) {
           Download my draft form (PDF)
         </a>
         <p className="text-xs text-text-secondary">
-          A few boxes are left blank on purpose — your Social Security number and
-          mailing address. We don&apos;t hold those.
+          Everything you&apos;ve told us is filled in. Anything still blank is
+          something we haven&apos;t asked you for yet — and the signature, which
+          has to be yours.
         </p>
       </CardContent>
     </Card>

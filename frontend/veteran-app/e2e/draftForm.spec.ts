@@ -39,5 +39,5 @@ test("the download is framed as a draft, not a filing", async ({ page }) => {
 
   // Guardrail (requirements 4.4): we never imply this files anything.
   await expect(page.getByText(/doesn't send anything to the VA/i)).toBeVisible();
-  await expect(page.getByText(/Social Security number and\s+mailing address/i)).toBeVisible();
+  await expect(page.getByText(/Everything you've told us is filled in/i)).toBeVisible();
 });

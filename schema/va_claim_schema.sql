@@ -15,7 +15,10 @@ CREATE TABLE IF NOT EXISTS veterans (
     branch TEXT,
     service_start TEXT,
     service_end TEXT,
-    discharge_type TEXT NOT NULL DEFAULT 'unknown'
+    discharge_type TEXT NOT NULL DEFAULT 'unknown',
+    ssn TEXT,
+    va_file_number TEXT,
+    address_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS claims (

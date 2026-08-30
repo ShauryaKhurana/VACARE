@@ -25,38 +25,52 @@ async function openDigWithUploadOffered(page: import("@playwright/test").Page) {
   await composer.press("Enter");
 }
 
-function trackUploads(page: import("@playwright/test").Page): string[] {
-  const uploads: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().includes("/documents")) {
-      uploads.push(request.url());
+/**
+ * Records the *status* of each upload, not merely that one was attempted.
+ *
+ * An earlier version tracked requests only, and so passed while the backend
+ * was not running at all — the request left the browser and failed. A test
+ * that is green when the server is down is worse than no test.
+ */
+function trackUploads(page: import("@playwright/test").Page): number[] {
+  const statuses: number[] = [];
+  page.on("response", (response) => {
+    if (
+      response.request().method() === "POST" &&
+      response.url().includes("/documents")
+    ) {
+      statuses.push(response.status());
     }
   });
-  return uploads;
+  return statuses;
 }
 
 test.describe("document upload", () => {
   test("the composer's attach button sends the file to the backend", async ({ page }) => {
-    const uploads = trackUploads(page);
+    const statuses = trackUploads(page);
     await openDigWithUploadOffered(page);
 
     const composerPicker = page.locator('input[type="file"]').last();
     await composerPicker.waitFor({ state: "attached", timeout: 30_000 });
     await composerPicker.setInputFiles(DD214);
 
-    await expect.poll(() => uploads.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    await expect.poll(() => statuses.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    expect(statuses.every((status) => status < 400)).toBe(true);
     // And the thread no longer shows the old "Attached: <name>" stand-in.
     await expect(page.getByText(/^Attached: /)).toHaveCount(0);
   });
 
   test("the card the dig offers sends the file to the backend", async ({ page }) => {
-    const uploads = trackUploads(page);
+    const statuses = trackUploads(page);
     await openDigWithUploadOffered(page);
 
     const cardPicker = page.locator('input[type="file"]').first();
     await cardPicker.waitFor({ state: "attached", timeout: 30_000 });
     await cardPicker.setInputFiles(DD214);
 
-    await expect.poll(() => uploads.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    await expect.poll(() => statuses.length, { timeout: 45_000 }).toBeGreaterThan(0);
+    expect(statuses.every((status) => status < 400)).toBe(true);
+    // The parse must actually land in the thread, not just return 200.
+    await expect(page.getByText(/Marcus Rivera/i).first()).toBeVisible({ timeout: 60_000 });
   });
 });

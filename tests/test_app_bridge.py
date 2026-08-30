@@ -216,6 +216,9 @@ def test_a_question_with_choices_sends_them_as_quick_replies():
     session.story_done = True
     session.identity_done = True
     session.contact_done = True
+    # The dig also collects a mailing address and SSN before rating.
+    session.address_done = True
+    session.ssn_done = True
     session.claim.veteran.first_name = "Dana"
     session.claim.veteran.last_name = "Reyes"
     session.claim.veteran.dob = date(1988, 3, 12)
