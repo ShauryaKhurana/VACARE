@@ -51,6 +51,67 @@ def _identity_from_claim(claim: Claim) -> bool:
     )
 
 
+# --- identity and condition matching ----------------------------------------
+
+_PLACEHOLDER_FIRST = {"Unknown", "New"}
+_PLACEHOLDER_LAST = {"Case", "Veteran"}
+
+# Words that describe a condition without distinguishing it from another.
+# Laterality (left/right) is deliberately NOT here: a left knee and a right
+# knee are separate conditions with separate ratings.
+_CONDITION_NOISE = {
+    "chronic", "acute", "bilateral", "mild", "moderate", "severe", "with",
+    "and", "the", "of", "disorder", "condition", "syndrome", "unspecified",
+}
+
+
+def _name_key(value: Optional[str]) -> str:
+    return "".join(character for character in (value or "").lower() if character.isalpha())
+
+
+def identity_conflict(claim: Claim, fields: Dict[str, Any]) -> Optional[str]:
+    """Whether an uploaded document names a different veteran than the claim.
+
+    Uploading someone else's records into a claim is a real hazard - the files
+    look alike and a VSO may be working several cases - and silently merging
+    them corrupts the claim. Only a clear surname mismatch counts; missing or
+    partial names are treated as agreement.
+    """
+    veteran = claim.veteran
+    if veteran.last_name in _PLACEHOLDER_LAST or veteran.first_name in _PLACEHOLDER_FIRST:
+        return None                       # nothing established yet
+
+    doc_last = _name_key(fields.get("last_name"))
+    if not doc_last:
+        return None                       # document does not name anyone
+
+    if doc_last == _name_key(veteran.last_name):
+        return None
+
+    doc_first = fields.get("first_name") or ""
+    return f"{doc_first} {fields.get('last_name') or ''}".strip()
+
+
+def _condition_tokens(name: str) -> frozenset:
+    cleaned = "".join(c if c.isalnum() else " " for c in (name or "").lower())
+    return frozenset(
+        word for word in cleaned.split()
+        if word not in _CONDITION_NOISE and len(word) > 2
+    )
+
+
+def same_condition(left: str, right: str) -> bool:
+    """True when two names describe the same claimed condition.
+
+    'Tinnitus', 'Tinnitus, bilateral' and 'Bilateral tinnitus' are one
+    condition; 'Left knee strain' and 'Right knee strain' are two.
+    """
+    a, b = _condition_tokens(left), _condition_tokens(right)
+    if not a or not b:
+        return _name_key(left) == _name_key(right)
+    return a <= b or b <= a
+
+
 @dataclass
 class DocumentIngestResult:
     filename: str
@@ -63,6 +124,9 @@ class DocumentIngestResult:
     evidence_type: str = "other"
     message: str = ""
     detail: str = ""  # multi-line field summary for chat UI confirmation
+    identity_conflict: Optional[str] = None  # name on the doc, when it is someone else
+    from_cache: bool = False        # parsed bytes were already known, no Gemini call
+    seen_before: bool = False       # this claim has had this exact file before
 
 
 def _safe_filename(name: str) -> str:
@@ -86,11 +150,16 @@ def ingest_document(
     preloaded_payload: Optional[Dict[str, Any]] = None,
 ) -> DocumentIngestResult:
     """Store a file and, when Gemini is available, read claim facts off it."""
+    content_hash = _file_hash(data)
+    seen_before = any(
+        (item.notes or "").endswith(content_hash) for item in claim.evidence
+    )
     stored = save_upload(claim.id, filename, data)
     intake = ClaimIntake(claim)
     result = DocumentIngestResult(
         filename=filename,
         stored_path=str(stored),
+        seen_before=seen_before,
     )
 
     used_cache = False
@@ -113,12 +182,12 @@ def ingest_document(
         )
         return result
     else:
-        content_hash = _file_hash(data)
         cached = parse_cache.get(data)
         if cached:
             payload = cached
             result.parsed_with_gemini = True
             used_cache = True
+            result.from_cache = True
         else:
             try:
                 payload = extract.extract_from_document(Attachment(filename, data))
@@ -150,9 +219,26 @@ def ingest_document(
         title=result.summary,
         source="upload",
         file_uri=str(stored),
+        notes=f"sha256:{content_hash}",
     )
 
-    applied = _merge_veteran(claim, extract.veteran_fields_from(payload))
+    fields = extract.veteran_fields_from(payload)
+    conflict = identity_conflict(claim, fields)
+    if conflict:
+        # Someone else's document. Keep the file as evidence, but do not let it
+        # touch this veteran's identity or add their conditions.
+        result.identity_conflict = conflict
+        result.message = (
+            f"This document is for {conflict}, but this claim is for "
+            f"{claim.veteran.full_name}. I've saved the file but haven't added "
+            "anything from it. If this is the right claim, upload the correct "
+            "document; if you're working a different case, start that one first."
+        )
+        result.detail = ""
+        intake.evaluate_readiness()
+        return result
+
+    applied = _merge_veteran(claim, fields)
     if applied:
         result.fields_applied = applied
 
@@ -173,13 +259,26 @@ def ingest_document(
         decision_helpers.apply_decision_payload(claim, payload)
         result.fields_applied = list(result.fields_applied) + ["decision_date"]
 
-    new_conditions = extract.conditions_from(payload)
-    existing = {condition.name.lower() for condition in claim.conditions}
-    for condition_fields in new_conditions:
-        if condition_fields["name"].lower() in existing:
+    for condition_fields in extract.conditions_from(payload):
+        name = condition_fields["name"]
+        match = next(
+            (c for c in claim.conditions if same_condition(c.name, name)), None
+        )
+        if match is not None:
+            # Same condition, different wording. Keep the more specific name
+            # and fill in anything the earlier mention lacked.
+            if len(name) > len(match.name):
+                match.name = name
+            if not match.onset_date and condition_fields.get("onset_date"):
+                match.onset_date = condition_fields["onset_date"]
+            if not match.diagnosis and condition_fields.get("diagnosis"):
+                match.diagnosis = condition_fields["diagnosis"]
+            match.currently_treated = match.currently_treated or bool(
+                condition_fields.get("currently_treated")
+            )
             continue
         intake.add_condition(**condition_fields)
-        result.conditions_added.append(condition_fields["name"])
+        result.conditions_added.append(name)
 
     headline, detail = format_parsed_receipt(
         claim,
@@ -187,9 +286,12 @@ def ingest_document(
         doc_type=doc_type,
         parsed=result.parsed_with_gemini,
     )
-    if used_cache:
-        result.message = "I recognized this document from earlier — here's what I have:"
+    if used_cache and seen_before:
+        result.message = "You've already uploaded this one — here's what I have:"
     else:
+        # A cache hit only means we parsed these bytes before, possibly on
+        # another claim. Saying "from earlier" to someone uploading for the
+        # first time reads like a bug.
         result.message = headline
     result.detail = detail
     if result.conditions_added:

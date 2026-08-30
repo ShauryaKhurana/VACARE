@@ -426,7 +426,12 @@ def next_question(session: Session) -> Question:
     if not session.records_done:
         return Question(
             slot=Slot.RECORDS,
-            text="Upload any doctor or VA medical records you have.",
+            text=(
+                "Upload any doctor or VA medical records you have."
+                if not claim.evidence else
+                f"Anything else to add? I've read {len(claim.evidence)} document"
+                f"{'s' if len(claim.evidence) != 1 else ''} so far."
+            ),
             help_text="Upload one or more files, then tap Done when finished.",
             accepts_upload=True,
             doc_tip=(

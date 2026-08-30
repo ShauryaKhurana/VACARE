@@ -58,7 +58,11 @@ def test_ingest_reuses_parse_cache_for_same_bytes(mock_extract, tmp_path, monkey
     ingest_document(claim_a, "dd214.pdf", pdf)
     claim_b = Claim(veteran=Veteran(first_name="New", last_name="Case"))
     result = ingest_document(claim_b, "dd214-copy.pdf", pdf)
-    assert "recognized this document from earlier" in result.message
+    # The cache hit is asserted on the result flag, not the chat copy: saying
+    # "recognized from earlier" to someone uploading for the first time on
+    # their own claim read like a bug, so that message is now reserved for a
+    # genuine repeat upload on the same claim.
+    assert result.from_cache
     mock_extract.assert_called_once()
 
 
@@ -73,7 +77,11 @@ def test_ingest_reuses_disk_parse_cache_after_memory_cleared(mock_extract, tmp_p
     claim_b = Claim(veteran=Veteran(first_name="New", last_name="Case"))
     result = ingest_document(claim_b, "dd214.pdf", pdf)
     assert result.document_type == "dd214"
-    assert "recognized this document from earlier" in result.message
+    # The cache hit is asserted on the result flag, not the chat copy: saying
+    # "recognized from earlier" to someone uploading for the first time on
+    # their own claim read like a bug, so that message is now reserved for a
+    # genuine repeat upload on the same claim.
+    assert result.from_cache
     mock_extract.assert_called_once()
 
 
@@ -104,7 +112,11 @@ def test_medical_record_reuses_disk_cache(mock_extract, tmp_path, monkeypatch):
         pdf,
     )
     assert result.document_type == "medical_record"
-    assert "recognized this document from earlier" in result.message
+    # The cache hit is asserted on the result flag, not the chat copy: saying
+    # "recognized from earlier" to someone uploading for the first time on
+    # their own claim read like a bug, so that message is now reserved for a
+    # genuine repeat upload on the same claim.
+    assert result.from_cache
     mock_extract.assert_called_once()
 
 
